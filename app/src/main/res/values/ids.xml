@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="cardKaop" type="id" />
+    <item name="cardKalro" type="id" />
+    <item name="cardKamis" type="id" />
+</resources>

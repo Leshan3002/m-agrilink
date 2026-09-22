@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background_cream">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Native Interactive Farm Boundary Profiler"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="@color/primary_terracotta"
+        android:gravity="center"
+        android:padding="12dp"/>
+
+    <!-- STEP 3 OVERRIDE: Native OpenStreetMap layout canvas container widget -->
+    <org.osmdroid.views.MapView
+        android:id="@+id/farmOsmMapView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_margin="16dp" />
+
+    <!-- Dynamic Soil, Moisture, & Area calculation parameter display area -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="6dp"
+        app:strokeColor="@color/accent_gold"
+        app:strokeWidth="1dp"
+        android:layout_margin="12dp"
+        android:backgroundTint="@color/card_surface_white">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:background="@color/farming_sage">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/txtComputedAcreage"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📐 Farm Size: 0.00 Acres"
+                    android:textStyle="bold"
+                    android:textSize="15sp"
+                    android:textColor="@color/primary_terracotta"/>
+
+                <Button
+                    android:id="@+id/btnClearPolygonPins"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Clear Plot"/>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/txtSoilClassificationDetails"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🌱 Soil Class: Drop coordinate perimeter pins to compute offline soil types."
+                android:textSize="13sp"
+                android:textColor="@color/label_charcoal"
+                android:layout_marginBottom="4dp"/>
+
+            <TextView
+                android:id="@+id/txtVolumetricSoilMoisture"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💧 Volumetric Moisture: Tracking parameter active."
+                android:textSize="13sp"
+                android:textColor="@color/label_charcoal"/>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+</LinearLayout>

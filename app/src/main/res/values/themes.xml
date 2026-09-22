@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- M-AgriLink Production Theme -->
+    <style name="Theme.MAgriLink" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary_terracotta</item>
+        <item name="colorSecondary">@color/accent_gold</item>
+        <item name="android:windowBackground">@color/background_cream</item>
+    </style>
+</resources>

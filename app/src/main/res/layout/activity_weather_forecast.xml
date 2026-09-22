@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_cream">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="In-App Weather Forecasting Hub"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="@color/primary_terracotta"
+                android:gravity="center"
+                android:layout_marginBottom="16dp"/>
+
+            <!-- Real-Time Metrics Parameters Header Summary -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/accent_gold"
+                android:backgroundTint="@color/card_surface_white"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:background="@color/farming_sage">
+
+                    <TextView
+                        android:id="@+id/txtWeatherCoordinatesHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Location Parameters: Loading..."
+                        android:textStyle="bold"
+                        android:textSize="14sp"
+                        android:textColor="@color/primary_terracotta"
+                        android:layout_marginBottom="12dp"/>
+
+                    <TextView
+                        android:id="@+id/txtWeatherCurrentOverview"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Connecting to JSON network endpoint..."
+                        android:textSize="15sp"
+                        android:textColor="@color/label_charcoal"/>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Hourly Cycles Matrix Area -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📈 Simulated Hourly Temperature Cycle"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:textColor="@color/label_charcoal"
+                android:layout_marginBottom="6dp"/>
+
+            <com.github.mikephil.charting.charts.LineChart
+                android:id="@+id/weatherLineChart"
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:layout_margin="16dp"
+                android:background="#1C1C1E"/>
+
+            <!-- Rain Probability Vectors Area -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🌧️ Day-by-Day Rain Probability Vectors"
+                android:textStyle="bold"
+                android:textSize="14sp"
+                android:textColor="@color/label_charcoal"
+                android:layout_marginBottom="6dp"/>
+
+            <com.github.mikephil.charting.charts.BarChart
+                android:id="@+id/rainBarChart"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:layout_margin="16dp"
+                android:background="#1C1C1E"/>
+
+            <!-- Atmospheric Parameters Area -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="10dp"
+                android:backgroundTint="@color/card_surface_white">
+
+                <GridLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:columnCount="2"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:id="@+id/txtWeatherLineChartPlaceholder"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="[Visual MPAndroidChart Framework Loaded]"
+                        android:textSize="11sp"
+                        android:textColor="@color/primary_terracotta"
+                        android:layout_columnSpan="2"
+                        android:layout_marginBottom="8dp"/>
+
+                    <TextView
+                        android:id="@+id/tvWindStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_columnWeight="1"
+                        android:text="💨 Wind: Loading..."
+                        android:textSize="13sp"
+                        android:textColor="@color/label_charcoal"/>
+
+                    <TextView
+                        android:id="@+id/tvHumidityStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_columnWeight="1"
+                        android:text="💧 Humidity: Loading..."
+                        android:textSize="13sp"
+                        android:textColor="@color/label_charcoal"/>
+                </GridLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="[Maps Advisory Engine Loaded: Check standalone dashboard]"
+                android:textSize="11sp"
+                android:textColor="@color/primary_terracotta"
+                android:layout_marginTop="12dp"/>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- MODULE 3: AI ASSISTANT FAB -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabAiAssistant"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="24dp"
+        app:srcCompat="@android:drawable/ic_menu_help"
+        app:backgroundTint="@color/accent_gold"
+        app:tint="@color/white"
+        android:contentDescription="Open AI Assistant" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

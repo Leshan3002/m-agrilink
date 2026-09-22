@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@color/background_cream">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Header Frame -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="National Market Corridor Engine"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@color/primary_terracotta"
+            android:gravity="center"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- Prompt Layer: Active County Selector -->
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Select Active Kenyan County"
+            app:boxStrokeColor="@color/accent_gold"
+            app:hintTextColor="@color/primary_terracotta"
+            android:layout_marginBottom="16dp">
+
+            <AutoCompleteTextView
+                android:id="@+id/countySelectorDropdown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="none"
+                android:focusable="false"/>
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- External Routing Action Buttons (Task 4) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenWeatherForecast"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Weather Forecast"
+                android:textSize="12sp"
+                app:icon="@android:drawable/ic_menu_myplaces"
+                android:layout_marginEnd="4dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenGoogleMapsAdvisory"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Maps Advisory"
+                android:textSize="12sp"
+                app:icon="@android:drawable/ic_dialog_map"
+                android:layout_marginStart="4dp"/>
+
+        </LinearLayout>
+
+        <!-- Crop Yield List Frame Header -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Regional Commonly Grown Crops"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/label_charcoal"
+            android:layout_marginBottom="8dp"/>
+
+        <!-- Crop Yield List Wrapper -->
+        <ListView
+            android:id="@+id/cropYieldListView"
+            android:layout_width="match_parent"
+            android:layout_height="250dp"
+            android:divider="@android:color/transparent"
+            android:dividerHeight="8dp"
+            android:layout_marginBottom="16dp"
+            android:background="#1A1A1A"/>
+
+        <!-- Metrics Matrix Visualization Area (Task 3 Target) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/marketAnalyticsMatrix"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="4dp"
+            app:strokeColor="@color/accent_gold"
+            app:strokeWidth="1dp"
+            android:backgroundTint="@color/card_surface_white">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="@color/farming_sage">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Market Analytics Matrix"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/primary_terracotta"
+                    android:layout_marginBottom="8dp"/>
+
+                <TextView
+                    android:id="@+id/txtMarketAnalyticsOutput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Select a regional crop from the frame above to compile offline pricing models and agronomic training modules."
+                    android:textSize="14sp"
+                    android:textColor="@color/label_charcoal"
+                    android:lineSpacingMultiplier="1.2"/>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</ScrollView>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Task 1: Rich Earth & Harvest Theme Override -->
+    <color name="primary_terracotta">#A75D5D</color> <!-- Deep Terracotta -->
+    <color name="accent_gold">#E6B325</color> <!-- Warm Harvest Sun Gold -->
+    <color name="background_cream">#F5F7F8</color>
+    <color name="label_charcoal">#3A3A3C</color>
+
+    <!-- Component-specific Layout Tones -->
+    <color name="farming_sage">#E8F5E9</color> <!-- Soft Forest Green / Sage -->
+    <color name="card_surface_white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_cream">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/bottomNavigation"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/titleText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="M-AgriLink National Market Analyzer"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="@color/primary_terracotta"
+                android:gravity="center"
+                android:layout_marginBottom="24dp"/>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Select Target County Hub"
+                app:boxStrokeColor="@color/accent_gold"
+                app:hintTextColor="@color/primary_terracotta"
+                android:layout_marginBottom="24dp">
+
+                <AutoCompleteTextView
+                    android:id="@+id/countyDropdown"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none"/>
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="4dp"
+                app:strokeColor="@color/accent_gold"
+                app:strokeWidth="1dp"
+                android:backgroundTint="@color/card_surface_white"
+                android:layout_marginBottom="24dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Arbitrage Analysis Output"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary_terracotta"
+                        android:layout_marginBottom="12dp"/>
+
+                    <TextView
+                        android:id="@+id/resultText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Select a county to analyze cross-border trade margins and viability."
+                        android:textSize="14sp"
+                        android:textColor="@color/label_charcoal"
+                        android:lineSpacingMultiplier="1.2"/>
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenNationalAnalyzer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Launch Regional Corridor Analyzer"
+                android:textColor="@color/white"
+                app:backgroundTint="@color/primary_terracotta"
+                app:cornerRadius="8dp"
+                android:layout_marginTop="16dp"/>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNavigation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:background="@color/white"
+        app:itemIconTint="@color/primary_terracotta"
+        app:itemTextColor="@color/label_charcoal"
+        app:menu="@menu/bottom_nav_menu" />
+
+</RelativeLayout>
