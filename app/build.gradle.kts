@@ -77,6 +77,7 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
 
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.animation:animation")
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
@@ -84,9 +85,11 @@ dependencies {
     // Jetpack Room Components
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     // Core Icon and Networking modules
     implementation(libs.androidx.compose.material.icons.core)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.play.services.location)
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
@@ -94,6 +97,12 @@ dependencies {
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     "kapt"(libs.room.compiler)
+
+    // Native CameraX field scanner (camera viewport + lifecycle binding)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.core)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
 
     // Test Configurations
     testImplementation(libs.junit)
@@ -103,4 +112,15 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    implementation("androidx.camera:camera-core:1.3.4")
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
+
+    // LiteRT (official TensorFlow Lite successor): unique manifest namespace,
+    // so the merger passes on AGP 9. Note: litert-support is intentionally
+    // omitted — our pipeline does manual ByteBuffer preprocessing and the
+    // support/support-api pair shares one namespace, which breaks the merge.
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
 }

@@ -1,0 +1,15 @@
+M-AgriLink on-device vision model slot
+==========================================
+
+Drop your trained TensorFlow Lite leaf model here as:
+
+    plant_disease_model.tflite
+
+Expected model contract (see TfliteLeafAnalyzer.kt):
+  - Input : float32 [1, 224, 224, 3], RGB normalized to [-1, 1]
+  - Output: float32 [1, 4] -> [Healthy, Fall Armyworm damage,
+            Gray Leaf Spot, Maize Lethal Necrosis]
+
+If the file is absent, the app keeps working fully offline via a
+built-in color heuristic fallback and the verified KALRO / FAO / CABI /
+icipe / CIMMYT advisory matrix in the scanner dialog.

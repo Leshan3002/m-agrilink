@@ -1,8 +1,15 @@
 package com.example.m_agrilink.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -33,8 +40,10 @@ data class TelemetryContext(
     val rainProb: String,
     val wind: String,
     val humidity: String,
-    val cropVariety: String,
-    val maizePrice: String
+    val cropVariety: String = "N/A",
+    val maizePrice: String = "N/A",
+    val beeProduct: String = "N/A",
+    val beeProductPrice: String = "N/A"
 )
 
 /**
@@ -84,9 +93,42 @@ fun AiChatOverlay(
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages) { message ->
-                    ChatBubble(message)
+                items(
+                    messages,
+                    key = { it.timestamp.toString() + it.text.hashCode() }
+                ) { message ->
+                    var bubbleVisible by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { bubbleVisible = true }
+                    AnimatedVisibility(
+                        visible = bubbleVisible,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        ChatBubble(message)
+                    }
                 }
+            }
+
+            // Friendly quick questions (tap instead of typing)
+            if (messages.none { it.isUser }) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "🌽 Holes in my maize leaves",
+                        "🐄 My cow gives less milk",
+                        "🌱 Yellow leaves on beans",
+                        "🐔 My chickens are coughing"
+                    ).forEach { suggestion ->
+                        OutlinedButton(onClick = { viewModel.sendMessage(suggestion, telemetry) }) {
+                            Text(suggestion, fontSize = 12.sp)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
             // Input Area
@@ -129,9 +171,9 @@ fun AiChatOverlay(
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {
+fun ChatBubble(message: ChatMessage, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
         contentAlignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
