@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import net.sqlcipher.database.SupportFactory
 
 @Database(
     entities = [CropAdvisory::class, HydrologicalAlert::class, ExpertForumPost::class, FarmerProfile::class, CropSearchHistory::class],
@@ -31,11 +32,15 @@ abstract class AgriLinkDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AgriLinkDatabase {
             return INSTANCE ?: synchronized(this) {
+                val appContext = context.applicationContext
+                val passphrase = DatabaseKeyManager.getPassphrase(appContext)
+                SqlCipherMigrator.ensureEncrypted(appContext, passphrase)
                 val instance = Room.databaseBuilder(
-                    context.applicationContext,
+                    appContext,
                     AgriLinkDatabase::class.java,
                     "magrilink_database"
                 )
+                .openHelperFactory(SupportFactory(passphrase))
                 .addMigrations(MIGRATION_1_2)
                 .fallbackToDestructiveMigration()
                 .build()

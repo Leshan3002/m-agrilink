@@ -37,7 +37,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -86,6 +87,10 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
+    // Encrypted database (SQLCipher) + Android Keystore passphrase storage
+    implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+    implementation("androidx.security:security-crypto:1.0.0")
 
     // Core Icon and Networking modules
     implementation(libs.androidx.compose.material.icons.core)
