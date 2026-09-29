@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -34,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
@@ -45,6 +47,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
@@ -135,6 +138,233 @@ private fun cropFullAdvisoryText(
     return (listOf(title) + body).joinToString("\n\n")
 }
 
+/** Google-AI-Overview style structured result helpers. */
+private fun overviewCropName(plantedCrop: String, liveDiagnosis: String): String {
+    val typed = plantedCrop.trim()
+    if (typed.isNotBlank()) return typed
+    val lens = liveDiagnosis.trim()
+    if (lens.isNotBlank() && !lens.startsWith("Point the lens") && !lens.startsWith("Invalid") && !lens.startsWith("Uncertain")) return lens
+    return "your crop"
+}
+
+private fun overviewPestName(plantedCrop: String, liveDiagnosis: String): String {
+    if (liveDiagnosis.contains("Healthy", ignoreCase = true)) return "no pest"
+    return when (cropScanKey(plantedCrop)) {
+        "mango" -> "Mango Fruit Fly (Bactrocera dorsalis)"
+        "beans", "bean" -> "Bean Fly (Ophiomyia phaseoli) / Black Bean Aphid"
+        "maize" -> if (liveDiagnosis.isNotBlank() && !liveDiagnosis.startsWith("Point the lens")) liveDiagnosis else "Fall Armyworm (Spodoptera frugiperda)"
+        else -> if (liveDiagnosis.isNotBlank() && !liveDiagnosis.startsWith("Point the lens") && !liveDiagnosis.startsWith("Invalid") && !liveDiagnosis.startsWith("Uncertain")) liveDiagnosis else "foliar pest"
+    }
+}
+
+private fun overviewControlBullets(): List<Pair<String, String>> = listOf(
+    "Physical Removal:" to "Use a strong jet of water to blast clusters off the branches.",
+    "Pruning & Sanitation:" to "Carefully prune away overrun leaves or twigs and destroy them by burning.",
+    "Organic Sprays:" to "Thoroughly coat branches with neem oil or insecticidal soap mixtures during cool morning hours.",
+    "Control the Ants:" to "Apply a sticky barrier band around the base of the trunk to cut off ant pathways that farm pest honeydew."
+)
+
+private const val OVERVIEW_CTA =
+    "💡 Let's optimize: Are you growing these crops in a small home garden plot or a large-scale commercial orchard? Let Shamba Al know so we can suggest tailored systemic organic treatment blends matching your growing scale!"
+
+/** Segmented TTS: reads the structured overview section by section with short pauses. */
+private fun speakOverviewSegments(
+    textToSpeech: TextToSpeech?,
+    plantedCrop: String,
+    liveDiagnosis: String,
+    confidencePct: Int,
+    source: String
+) {
+    val tts = textToSpeech ?: return
+    try {
+        tts.stop()
+    } catch (e: Exception) {
+    }
+    val cropName = overviewCropName(plantedCrop, liveDiagnosis)
+    val pestName = overviewPestName(plantedCrop, liveDiagnosis)
+    val segments = mutableListOf<String>()
+    if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
+        segments.add("Identification. Your $cropName looks healthy. Confidence $confidencePct percent via $source.")
+        segments.add("Preventive care. Keep scouting twice weekly, clear weeds and debris, mulch to hold moisture, and watch leaf edges after humid nights.")
+    } else {
+        segments.add("Identification. Your $cropName is facing a severe infestation of $pestName. Confidence $confidencePct percent via $source.")
+        segments.add("Immediate control and management.")
+        overviewControlBullets().forEach { (lead, rest) ->
+            segments.add("$lead $rest")
+        }
+        val extra = if (cropScanKey(plantedCrop).isBlank()) emptyList()
+        else cropDiagnosticBody(plantedCrop).map { it.replace(Regex("^[\\p{So}\\s]+"), "") }
+        segments.addAll(extra)
+    }
+    segments.add("Let's optimize. Are you growing these crops in a small home garden plot or a large-scale commercial orchard? Let Shamba A I know so we can suggest tailored systemic organic treatment blends matching your growing scale.")
+    segments.forEachIndexed { index, part ->
+        part.chunked(400).forEach { chunk ->
+            try {
+                tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, "overview_$index")
+            } catch (e: Exception) {
+            }
+        }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                tts.playSilentUtterance(350L, TextToSpeech.QUEUE_ADD, "pause_$index")
+            }
+        } catch (e: Exception) {
+        }
+    }
+}
+
+/**
+ * Production Google-AI-Overview style result card: identification header,
+ * itemized bold-lead control bullets, crop protocol, and harvest CTA strip.
+ */
+@Composable
+private fun ScanOverviewCard(
+    plantedCrop: String,
+    liveDiagnosis: String,
+    confidencePct: Int,
+    source: String,
+    textToSpeech: TextToSpeech?,
+    modifier: Modifier = Modifier
+) {
+    val cropName = overviewCropName(plantedCrop, liveDiagnosis)
+    val pestName = overviewPestName(plantedCrop, liveDiagnosis)
+    val isHealthy = liveDiagnosis.contains("Healthy", ignoreCase = true)
+    val scanTitle = cropDiagnosticTitle(plantedCrop, liveDiagnosis, confidencePct, source)
+    val scanBody: List<String> = if (isHealthy) {
+        listOf("🌿 PREVENTIVE CARE: Keep scouting twice weekly, clear weeds and debris around the base, mulch to hold moisture, and watch leaf edges after humid nights. Retake the scan if spots, holes, or yellowing appear.")
+    } else {
+        cropDiagnosticBody(plantedCrop)
+    }
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "🩺 IDENTIFICATION",
+                color = Color(0xFF1B5E20),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.5.sp,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = {
+                    if (AppAudioGate.muted) {
+                        AppAudioGate.muted = false
+                        speakOverviewSegments(textToSpeech, plantedCrop, liveDiagnosis, confidencePct, source)
+                    } else {
+                        try {
+                            textToSpeech?.stop()
+                        } catch (e: Exception) {
+                        }
+                        AppAudioGate.muted = true
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = if (AppAudioGate.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                    contentDescription = "Read scan result aloud",
+                    tint = Color(0xFFE6B325)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = if (isHealthy) "Your $cropName looks healthy ($confidencePct% confidence via $source)."
+            else "Your $cropName is facing a severe infestation of $pestName ($confidencePct% confidence via $source).",
+            color = Color.Black,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = scanTitle,
+            color = Color(0xFF2C2C2E),
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "🛠️ IMMEDIATE CONTROL & MANAGEMENT",
+            color = Color(0xFF1B5E20),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.5.sp
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        overviewControlBullets().forEach { (lead, rest) ->
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                Text(
+                    text = "• ",
+                    color = Color(0xFF2E7D32),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = androidx.compose.ui.text.buildAnnotatedString {
+                        pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.ExtraBold, color = Color.Black))
+                        append(lead)
+                        pop()
+                        append(" $rest")
+                    },
+                    color = Color(0xFF2C2C2E),
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "🌿 CROP-SPECIFIC PROTOCOL",
+            color = Color(0xFF1B5E20),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.5.sp
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        scanBody.forEach { paragraph ->
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                Text(
+                    text = "• ",
+                    color = Color(0xFF2E7D32),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = paragraph,
+                    color = Color(0xFF2C2C2E),
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFFFF8E1), RoundedCornerShape(10.dp))
+                .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(10.dp))
+                .padding(12.dp)
+        ) {
+            Text(
+                text = OVERVIEW_CTA,
+                color = Color(0xFF2C2C2E),
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PremiumMarketAnalyzerScreen() {
@@ -175,20 +405,6 @@ fun PremiumMarketAnalyzerScreen() {
             "viewport" to "home",
             "engine" to "M-AgriLink offline cache"
         )
-    }
-
-    // System back button: step back through scanner -> chat -> weather page
-    // instead of exiting the app from a sub-page.
-    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather") {
-        when {
-            isScanningForDisease -> {
-                isScanningForDisease = false
-                diseaseScanComplete = false
-                isAnalyzing = false
-            }
-            showShambaChat -> showShambaChat = false
-            activeViewport == "weather" -> activeViewport = "home"
-        }
     }
 
     // --- 1. TEXT-TO-SPEECH CODES CONTROLLER (Swahili/English accessibility) ---
@@ -276,6 +492,109 @@ fun PremiumMarketAnalyzerScreen() {
     var briefSource by remember { mutableStateOf("") }
     var liveLoading by remember { mutableStateOf(false) }
     var cropHistory by remember { mutableStateOf(listOf<String>()) }
+
+    // --- GOOGLE-LIKE SCANNER RUNTIME (camera + gallery, any crop part) ---
+    var imageSourceLabel by remember { mutableStateOf("Camera live") }
+    var galleryBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var isGalleryMode by remember { mutableStateOf(false) }
+    var googleBrief by remember { mutableStateOf<String?>(null) }
+    var googleSource by remember { mutableStateOf("") }
+    var googleLoading by remember { mutableStateOf(false) }
+    val galleryPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri == null) {
+            scope.launch(Dispatchers.Main) {
+                scannerError = "⚠️ No image selected. Tap 🖼️ Upload Crop Image and pick a clear crop photo."
+                imageSourceLabel = "Gallery upload"
+                isGalleryMode = false
+                isScanningForDisease = true
+                diseaseScanComplete = false
+                isAnalyzing = false
+            }
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bitmap = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                    val src = android.graphics.ImageDecoder.createSource(
+                        context.applicationContext.contentResolver, uri
+                    )
+                    android.graphics.ImageDecoder.decodeBitmap(src) { decoder, _, _ ->
+                        decoder.setTargetSampleSize(2)
+                    }
+                } else {
+                    context.applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+                        android.graphics.BitmapFactory.decodeStream(stream)
+                    }
+                }
+                if (bitmap == null) {
+                    withContext(Dispatchers.Main) {
+                        scannerError = "⚠️ Scanner Alert: Could not read that image. Pick a clear crop leaf, fruit, or stem photo and try again."
+                        imageSourceLabel = "Gallery upload"
+                        galleryBitmap = null
+                        isGalleryMode = true
+                        googleBrief = null
+                        googleSource = ""
+                        googleLoading = false
+                        isScanningForDisease = true
+                        diseaseScanComplete = false
+                        isAnalyzing = false
+                    }
+                    return@launch
+                }
+                val smart = TfliteLeafAnalyzer.classifySmart(bitmap, tfliteInterpreter)
+                withContext(Dispatchers.Main) {
+                    galleryBitmap = bitmap
+                    isGalleryMode = true
+                    imageSourceLabel = "Gallery upload"
+                    liveDiagnosis = smart.diagnosis.label
+                    liveConfidence = smart.diagnosis.confidence
+                    liveSource = smart.diagnosis.source
+                    scannerError = if (smart.quality.usable) null else smart.quality.guidance
+                    googleBrief = null
+                    googleSource = ""
+                    googleLoading = false
+                    isScanningForDisease = true
+                    diseaseScanComplete = false
+                    isAnalyzing = true
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    scannerError = "⚠️ Scanner Alert: Could not read that image (${e.message ?: "decode failed"}). Pick a clear crop leaf, fruit, or stem photo and try again."
+                    galleryBitmap = null
+                    isGalleryMode = true
+                    imageSourceLabel = "Gallery upload"
+                    isScanningForDisease = true
+                    diseaseScanComplete = false
+                    isAnalyzing = false
+                }
+            }
+        }
+    }
+
+    fun openWebLink(url: String) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (e: Exception) {
+        }
+    }
+
+    // System back button: step back through scanner -> chat -> weather page
+    // instead of exiting the app from a sub-page.
+    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather") {
+        when {
+            isScanningForDisease -> {
+                isScanningForDisease = false
+                diseaseScanComplete = false
+                isAnalyzing = false
+                isGalleryMode = false
+                galleryBitmap = null
+            }
+            showShambaChat -> showShambaChat = false
+            activeViewport == "weather" -> activeViewport = "home"
+        }
+    }
 
     // --- LORRY MARKETPLACE RUNTIME (Room-backed registry + task tracking) ---
     var showRegisterForm by remember { mutableStateOf(false) }
@@ -1143,7 +1462,7 @@ fun PremiumMarketAnalyzerScreen() {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Track Maize Lethal Necrosis or Fall Armyworm instantly with AI camera scan.",
+                        text = "Snap or upload any crop photo — leaf, fruit, or stem — for instant Google-AI control and management steps.",
                         color = Color.DarkGray,
                         fontSize = 13.sp,
                         lineHeight = 18.sp
@@ -1154,7 +1473,13 @@ fun PremiumMarketAnalyzerScreen() {
                             diseaseScanComplete = false
                             isAnalyzing = false
                             scanResult = null
-                            liveDiagnosis = "Point the lens at a ${farmerPlantedCrop.trim().ifBlank { "crop" }} leaf…"
+                            googleBrief = null
+                            googleSource = ""
+                            googleLoading = false
+                            imageSourceLabel = "Camera live"
+                            galleryBitmap = null
+                            isGalleryMode = false
+                            liveDiagnosis = "Point the lens at a ${farmerPlantedCrop.trim().ifBlank { "crop" }} leaf or fruit…"
                             liveConfidence = 0f
                             liveSource = "on-device analyzer"
                             scannerError = null
@@ -1170,15 +1495,47 @@ fun PremiumMarketAnalyzerScreen() {
                     ) {
                         Text("Launch AI Camera Scanner", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { galleryPicker.launch("image/*") },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("🖼️ Upload Crop Image Instead", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                    }
                     if (scanResult != null) {
                         Spacer(modifier = Modifier.height(10.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFF4F6F8), RoundedCornerShape(8.dp))
-                                .padding(10.dp)
-                        ) {
-                            Text(scanResult ?: "", color = Color(0xFF2C2C2E), fontSize = 13.sp, lineHeight = 18.sp)
+                        val scanOk = liveConfidence >= 0.55f &&
+                            !liveDiagnosis.startsWith("Invalid") &&
+                            !liveDiagnosis.startsWith("Uncertain") &&
+                            !liveDiagnosis.startsWith("Point the lens")
+                        if (scanOk) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White, RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(12.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                                    ScanOverviewCard(
+                                        plantedCrop = farmerPlantedCrop,
+                                        liveDiagnosis = liveDiagnosis,
+                                        confidencePct = (liveConfidence * 100).toInt(),
+                                        source = liveSource,
+                                        textToSpeech = textToSpeech
+                                    )
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFF4F6F8), RoundedCornerShape(8.dp))
+                                    .padding(10.dp)
+                            ) {
+                                Text(scanResult ?: "", color = Color(0xFF2C2C2E), fontSize = 13.sp, lineHeight = 18.sp)
+                            }
                         }
                     }
                 }
@@ -1220,6 +1577,8 @@ fun PremiumMarketAnalyzerScreen() {
                         isScanningForDisease = false
                         diseaseScanComplete = false
                         isAnalyzing = false
+                        isGalleryMode = false
+                        galleryBitmap = null
                     },
                     title = {
                         Text(
@@ -1256,6 +1615,13 @@ fun PremiumMarketAnalyzerScreen() {
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(Color.Black)
                                 ) {
+                                    if (isGalleryMode && galleryBitmap != null) {
+                                        Image(
+                                            bitmap = galleryBitmap!!.asImageBitmap(),
+                                            contentDescription = "Uploaded crop image",
+                                            modifier = Modifier.matchParentSize()
+                                        )
+                                    } else {
                                     AndroidView(
                                         factory = { ctx ->
                                             PreviewView(ctx).apply {
@@ -1279,6 +1645,15 @@ fun PremiumMarketAnalyzerScreen() {
                                                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                                             .build()
                                                         imageAnalyzer.setAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
+                                                            // Gallery uploads already have a diagnosis — never let
+                                                            // live camera frames overwrite it.
+                                                            if (isGalleryMode) {
+                                                                try {
+                                                                    imageProxy.close()
+                                                                } catch (e: Exception) {
+                                                                }
+                                                                return@setAnalyzer
+                                                            }
                                                             try {
                                                                 try {
                                                                     val now = SystemClock.uptimeMillis()
@@ -1328,6 +1703,7 @@ fun PremiumMarketAnalyzerScreen() {
                                         },
                                         modifier = Modifier.matchParentSize()
                                     )
+                                    } // end camera preview (gallery shows static image above)
                                     // Animated pulsing scanner beam while parsing imagery nodes.
                                     if (isAnalyzing) {
                                         Box(
@@ -1349,10 +1725,18 @@ fun PremiumMarketAnalyzerScreen() {
                                                 .alpha(scanBeamAlpha)
                                         )
                                     }
-                                    // Translucent floating capture circle over the lower center.
-                                    if (!diseaseScanComplete) {
+                                    // Translucent floating capture circle (live camera only).
+                                    if (!diseaseScanComplete && !isGalleryMode) {
                                         IconButton(
-                                            onClick = { isAnalyzing = true },
+                                            onClick = {
+                                                googleBrief = null
+                                                googleSource = ""
+                                                googleLoading = false
+                                                imageSourceLabel = "Camera live"
+                                                galleryBitmap = null
+                                                isGalleryMode = false
+                                                isAnalyzing = true
+                                            },
                                             enabled = !isAnalyzing,
                                             modifier = Modifier
                                                 .align(Alignment.BottomCenter)
@@ -1461,66 +1845,142 @@ fun PremiumMarketAnalyzerScreen() {
                                     )
                                 } else {
                                     val confidencePct = (liveConfidence * 100).toInt()
-                                    val scanTitle = cropDiagnosticTitle(farmerPlantedCrop, liveDiagnosis, confidencePct, liveSource)
-                                    val scanBody: List<String> =
-                                        if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
-                                            listOf("🌿 PREVENTIVE CARE: Keep scouting twice weekly, clear weeds and debris around the base, mulch to hold moisture, and watch leaf edges after humid nights. Retake the scan if spots, holes, or yellowing appear.")
-                                        } else {
-                                            cropDiagnosticBody(farmerPlantedCrop)
-                                        }
-                                    val scanSpeech = cropFullAdvisoryText(farmerPlantedCrop, liveDiagnosis, confidencePct, liveSource)
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .background(Color(0xFFE8F5E9), RoundedCornerShape(8.dp))
+                                            .background(Color.White, RoundedCornerShape(12.dp))
+                                            .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(12.dp))
                                             .padding(12.dp)
                                     ) {
-                                        Column {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween
+                                        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                                            ScanOverviewCard(
+                                                plantedCrop = farmerPlantedCrop,
+                                                liveDiagnosis = liveDiagnosis,
+                                                confidencePct = confidencePct,
+                                                source = liveSource,
+                                                textToSpeech = textToSpeech
+                                            )
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            // Google-sourced enrichment: Gemini-first brief + web sources.
+                                            val scanQuery = remember(liveDiagnosis, farmerPlantedCrop) {
+                                                val crop = farmerPlantedCrop.trim().ifBlank { "crop" }
+                                                "$crop $liveDiagnosis control and management Kenya"
+                                            }
+                                            LaunchedEffect(diseaseScanComplete, scanQuery) {
+                                                if (!diseaseScanComplete || googleLoading || googleBrief != null) return@LaunchedEffect
+                                                googleLoading = true
+                                                val (text, source) = try {
+                                                    liveLookup.lookupCrop(
+                                                        scanQuery,
+                                                        selectedCounty.ifBlank { "Kenya" },
+                                                        activeTemperature,
+                                                        activeHumidity,
+                                                        activeWindSpeed
+                                                    )
+                                                } catch (e: Exception) {
+                                                    "Google lookup failed. Check connection and use the buttons below." to "OFFLINE"
+                                                }
+                                                googleBrief = text
+                                                googleSource = source
+                                                googleLoading = false
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(Color(0xFFF4F6F8), RoundedCornerShape(8.dp))
+                                                    .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(8.dp))
+                                                    .padding(12.dp)
                                             ) {
-                                                Text(
-                                                    scanTitle,
-                                                    color = Color(0xFF2C2C2E),
-                                                    fontSize = 13.sp,
-                                                    lineHeight = 19.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                                IconButton(
-                                                    onClick = {
-                                                        if (AppAudioGate.muted) {
-                                                            AppAudioGate.muted = false
-                                                            scanSpeech.chunked(400).forEach { chunk ->
-                                                                textToSpeech?.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
+                                                Column {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text(
+                                                            "🔎 Google AI Crop Details",
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color.Black,
+                                                            modifier = Modifier.weight(1f)
+                                                        )
+                                                        if (googleSource.isNotEmpty() && !googleLoading) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .background(Color(0xFFE6B325), RoundedCornerShape(8.dp))
+                                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    when (googleSource) {
+                                                                        "GEMINI" -> "✨ GOOGLE AI"
+                                                                        "OPENFARM" -> "🌱 OPENFARM"
+                                                                        "WIKI" -> "🌐 WIKIPEDIA"
+                                                                        "CACHE" -> "⚡ CACHED"
+                                                                        else -> googleSource
+                                                                    },
+                                                                    fontSize = 11.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color.Black
+                                                                )
                                                             }
-                                                        } else {
-                                                            textToSpeech?.stop()
-                                                            AppAudioGate.muted = true
                                                         }
                                                     }
-                                                ) {
-                                                    Icon(
-                                                        imageVector = if (AppAudioGate.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                                                        contentDescription = "Read scan result aloud",
-                                                        tint = Color(0xFFE6B325)
+                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                    Text(
+                                                        "Source: $imageSourceLabel • any crop part (leaf, fruit, stem)",
+                                                        fontSize = 11.sp,
+                                                        color = Color.Gray
                                                     )
+                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                    if (googleLoading && googleBrief == null) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            CircularProgressIndicator(
+                                                                modifier = Modifier.size(18.dp),
+                                                                strokeWidth = 2.dp,
+                                                                color = Color(0xFF1E3A8A)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(8.dp))
+                                                            Text("Pulling Google AI details…", fontSize = 12.sp, color = Color.DarkGray)
+                                                        }
+                                                    } else {
+                                                        Text(
+                                                            googleBrief ?: "Google details will appear here when online.",
+                                                            fontSize = 12.sp,
+                                                            lineHeight = 18.sp,
+                                                            color = Color(0xFF2C2C2E)
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    val encoded = Uri.encode(scanQuery)
+                                                    OutlinedButton(
+                                                        onClick = { openWebLink("https://www.google.com/search?q=$encoded") },
+                                                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                                                        shape = RoundedCornerShape(10.dp)
+                                                    ) {
+                                                        Text("🔍 Open Full Details on Google", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
+                                                    }
+                                                    Spacer(modifier = Modifier.height(6.dp))
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        OutlinedButton(
+                                                            onClick = { openWebLink("https://www.youtube.com/results?search_query=$encoded") },
+                                                            modifier = Modifier.weight(1f).height(44.dp),
+                                                            shape = RoundedCornerShape(10.dp)
+                                                        ) {
+                                                            Text("▶️ YouTube", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                                        }
+                                                        OutlinedButton(
+                                                            onClick = { openWebLink("https://www.facebook.com/search/top?q=$encoded") },
+                                                            modifier = Modifier.weight(1f).height(44.dp),
+                                                            shape = RoundedCornerShape(10.dp)
+                                                        ) {
+                                                            Text("📘 Facebook", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                                        }
+                                                    }
                                                 }
                                             }
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            scanBody.forEach { paragraph ->
-                                                Text(
-                                                    paragraph,
-                                                    color = Color(0xFF2C2C2E),
-                                                    fontSize = 13.sp,
-                                                    lineHeight = 19.sp,
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                            }
-                                            Spacer(modifier = Modifier.height(2.dp))
                                             Spacer(modifier = Modifier.height(10.dp))
                                             OutlinedButton(
                                                 onClick = {
@@ -1561,16 +2021,22 @@ fun PremiumMarketAnalyzerScreen() {
                                     !liveDiagnosis.startsWith("Point the lens")
                                 if (valid) {
                                     val confidencePct = (liveConfidence * 100).toInt()
-                                    scanResult = "Live lens match: $liveDiagnosis ($confidencePct% confidence via $liveSource).\n\n" +
+                                    var full = "Live lens match ($imageSourceLabel): $liveDiagnosis ($confidencePct% confidence via $liveSource).\n\n" +
                                         cropFullAdvisoryText(farmerPlantedCrop, liveDiagnosis, confidencePct, liveSource)
+                                    if (!googleBrief.isNullOrBlank()) {
+                                        full += "\n\n🔎 Google AI ($googleSource): $googleBrief"
+                                    }
+                                    scanResult = full
                                 } else if (scannerError != null) {
                                     scanResult = scannerError
                                 } else {
-                                    scanResult = "⚠️ Scan unclear — no valid leaf captured. Clean the lens, improve lighting, point at a crop leaf filling the frame, and launch the scanner again."
+                                    scanResult = "⚠️ Scan unclear — no valid crop captured. Clean the lens, improve lighting, point at a crop leaf, fruit, or stem filling the frame, and launch the scanner again."
                                 }
                                 isScanningForDisease = false
                                 diseaseScanComplete = false
                                 isAnalyzing = false
+                                isGalleryMode = false
+                                galleryBitmap = null
                             }
                         ) {
                             Text("Close Scan", fontWeight = FontWeight.Bold, color = Color(0xFFA75D5D))

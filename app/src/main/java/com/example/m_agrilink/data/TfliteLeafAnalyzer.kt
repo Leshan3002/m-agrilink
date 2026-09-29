@@ -169,6 +169,11 @@ object TfliteLeafAnalyzer {
             val brightness01 = (mean / 255.0).toFloat().coerceIn(0f, 1f)
             val darkFraction = darkCount / n
             val brightFraction = brightCount / n
+            // Fruit-friendly: ripe produce (mango, tomato, banana) is red/yellow,
+            // not green — accept vivid non-green crops when sharp and well lit.
+            val produceLike = (rf > 0.32 && rf >= gf * 0.85 && bf < rf) ||
+                (rf + gf > 0.75 && bf < 0.35)
+            val cropLike = greenRatio >= 0.26 || produceLike
             when {
                 darkFraction > 0.72 || mean < 32.0 -> FrameQuality(
                     usable = false,
@@ -176,7 +181,7 @@ object TfliteLeafAnalyzer {
                     brightness01 = brightness01,
                     greenRatio = greenRatio,
                     sharpness = stddev.toFloat(),
-                    guidance = "⚠️ Scanner Alert: Frame too dark — no leaf detail visible. Clean the lens, turn on the light/flash, and point steady at a crop leaf filling the frame, then retry."
+                    guidance = "⚠️ Scanner Alert: Frame too dark — no crop detail visible. Clean the lens, turn on the light/flash, and point steady at the crop (leaf, fruit, or stem) filling the frame, then retry."
                 )
                 brightFraction > 0.72 || mean > 228.0 -> FrameQuality(
                     usable = false,
@@ -184,7 +189,7 @@ object TfliteLeafAnalyzer {
                     brightness01 = brightness01,
                     greenRatio = greenRatio,
                     sharpness = stddev.toFloat(),
-                    guidance = "⚠️ Scanner Alert: Frame washed out by glare. Shade the leaf, wipe the lens, hold steady and retry."
+                    guidance = "⚠️ Scanner Alert: Frame washed out by glare. Shade the crop, wipe the lens, hold steady and retry."
                 )
                 stddev < 11.0 -> FrameQuality(
                     usable = false,
@@ -192,15 +197,15 @@ object TfliteLeafAnalyzer {
                     brightness01 = brightness01,
                     greenRatio = greenRatio,
                     sharpness = stddev.toFloat(),
-                    guidance = "⚠️ Scanner Alert: Blurry or covered lens — hold the phone steady, tap to focus, clean the lens, and make the leaf fill the frame."
+                    guidance = "⚠️ Scanner Alert: Blurry or covered lens — hold the phone steady, tap to focus, clean the lens, and make the crop fill the frame."
                 )
-                greenRatio < 0.30 -> FrameQuality(
+                !cropLike -> FrameQuality(
                     usable = false,
                     reason = FrameRejectReason.NO_LEAF,
                     brightness01 = brightness01,
                     greenRatio = greenRatio,
                     sharpness = stddev.toFloat(),
-                    guidance = "⚠️ Scanner Alert: No crop leaf detected. Point the camera at a green maize leaf so it fills the frame — not a dark room, wall, or empty background."
+                    guidance = "⚠️ Scanner Alert: No crop detected. Point the camera at a crop leaf, fruit, or stem so it fills the frame — not a dark room, wall, or empty background."
                 )
                 else -> FrameQuality(
                     usable = true,
