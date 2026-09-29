@@ -70,6 +70,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val ARCHITECT_ATTRIBUTION =
+    "Application Created and Engineered by Lead Architect Levis Lekesio."
+
+class ImageProcessingException(message: String) : Exception(message)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PremiumMarketAnalyzerScreen() {
@@ -92,6 +97,25 @@ fun PremiumMarketAnalyzerScreen() {
     var analyzerAttached by remember { mutableStateOf(false) }
     val lastFrameMs = remember { longArrayOf(0L) }
     var showShambaChat by remember { mutableStateOf(false) }
+
+    // --- TOP ACTION BAR + ACCOUNT STATE MACHINE (thread-safe Compose state) ---
+    var isUserLoggedIn by remember { mutableStateOf(false) }
+    var usernameInput by remember { mutableStateOf("") }
+    var isDarkTheme by remember { mutableStateOf(false) }
+    var selectedLanguage by remember { mutableStateOf("English") }
+    var activeViewport by remember { mutableStateOf("home") }
+    var navExpanded by remember { mutableStateOf(false) }
+    var langExpanded by remember { mutableStateOf(false) }
+    var settingsExpanded by remember { mutableStateOf(false) }
+    var scannerError by remember { mutableStateOf<String?>(null) }
+    var cacheNotice by remember { mutableStateOf<String?>(null) }
+    val systemMetadata = remember {
+        mapOf(
+            "architect" to ARCHITECT_ATTRIBUTION,
+            "viewport" to "home",
+            "engine" to "M-AgriLink offline cache"
+        )
+    }
 
     // --- 1. TEXT-TO-SPEECH CODES CONTROLLER (Swahili/English accessibility) ---
     val context = LocalContext.current
@@ -322,28 +346,16 @@ fun PremiumMarketAnalyzerScreen() {
         }
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showShambaChat = true },
-                containerColor = Color(0xFF2E7D32)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Chat,
-                    contentDescription = "Ask Shamba AI",
-                    tint = Color.White
-                )
-            }
-        }
-    ) { scaffoldPadding ->
+    Scaffold { scaffoldPadding ->
+        val canvasBackground = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F6F8)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF4F6F8)) // Modern soft off-white canvas backdrop
+                .background(canvasBackground) // Modern canvas backdrop, dark-mode aware
                 .verticalScroll(scrollState)
                 .padding(bottom = scaffoldPadding.calculateBottomPadding())
         ) {
-        // --- 1. THE STATUS-BAR COMPLIANT HEADER GRADIENT BANNER ---
+        // --- 1. THE STATUS-BAR COMPLIANT HEADER GRADIENT BANNER + TOP ACTION BAR ---
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -353,10 +365,39 @@ fun PremiumMarketAnalyzerScreen() {
                         colors = listOf(Color(0xFFA75D5D), Color(0xFF8C4A4A)) // Rich Terracotta Gradient
                     )
                 )
-                .statusBarsPadding() // ⚠️ FIX: Pushes layout down safely beneath phone clock/battery icons!
+                .statusBarsPadding() // Pushes layout down safely beneath phone clock/battery icons!
                 .padding(horizontal = 20.dp, vertical = 24.dp)
         ) {
             Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = systemMetadata["architect"] ?: ARCHITECT_ATTRIBUTION,
+                        fontSize = 10.sp,
+                        color = Color(0xFFF2E6E6),
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    if (isUserLoggedIn) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.White)
+                                .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "👨‍🌾 Levis Lekesio (Developer Hub / Farmer Profile)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     text = "M-AgriLink",
                     fontSize = 13.sp,
@@ -377,11 +418,190 @@ fun PremiumMarketAnalyzerScreen() {
                     fontSize = 12.sp,
                     color = Color(0xFFF2E6E6)
                 )
+                Spacer(modifier = Modifier.height(14.dp))
+                // Top 3 anchor buttons with nested sub-menus
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        Button(
+                            onClick = { navExpanded = true },
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                        ) {
+                            Text("🌐 Navigation", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
+                        DropdownMenu(
+                            expanded = navExpanded,
+                            onDismissRequest = { navExpanded = false },
+                            modifier = Modifier.background(Color.White)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Go to Home Page Dashboard", color = Color.Black) },
+                                onClick = {
+                                    activeViewport = "home"
+                                    navExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Market Overview", color = Color.Black) },
+                                onClick = {
+                                    activeViewport = "market"
+                                    navExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Weather Terminal", color = Color.Black) },
+                                onClick = {
+                                    activeViewport = "weather"
+                                    navExpanded = false
+                                }
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        Button(
+                            onClick = { langExpanded = true },
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                        ) {
+                            Text("🔤 Language", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
+                        DropdownMenu(
+                            expanded = langExpanded,
+                            onDismissRequest = { langExpanded = false },
+                            modifier = Modifier.background(Color.White)
+                        ) {
+                            listOf("English", "Kiswahili", "Kikuyu", "Kaljin", "Luo").forEach { lang ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            (if (selectedLanguage == lang) "✓ " else "") + lang,
+                                            color = Color.Black
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedLanguage = lang
+                                        langExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        Button(
+                            onClick = { settingsExpanded = true },
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1E))
+                        ) {
+                            Text("⚙️ System Settings", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                        DropdownMenu(
+                            expanded = settingsExpanded,
+                            onDismissRequest = { settingsExpanded = false },
+                            modifier = Modifier.background(Color.White)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(if (isDarkTheme) "Toggle Dark Mode Theme (On)" else "Toggle Dark Mode Theme (Off)", color = Color.Black) },
+                                onClick = {
+                                    isDarkTheme = !isDarkTheme
+                                    settingsExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Clear Device Cache", color = Color.Black) },
+                                onClick = {
+                                    liveBrief = null
+                                    briefSource = ""
+                                    cropHistory = listOf()
+                                    cacheNotice = "Device cache cleared."
+                                    settingsExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Accessibility Profiles", color = Color.Black) },
+                                onClick = {
+                                    cacheNotice = "Accessibility profiles: Standard / High-contrast / Large-text ready."
+                                    settingsExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                if (cacheNotice != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(cacheNotice ?: "", fontSize = 11.sp, color = Color.White)
+                }
             }
         }
 
         Column(modifier = Modifier.padding(16.dp)) {
             Spacer(modifier = Modifier.height(8.dp))
+
+            // --- 1B. FARMER ACCOUNT STATE MACHINE ---
+            if (!isUserLoggedIn) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(4.dp, RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "👨‍🌾 Farmer Account",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2C2C2E)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Create an account to personalize advisories ($selectedLanguage).",
+                            fontSize = 13.sp,
+                            color = Color.DarkGray
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = usernameInput,
+                            onValueChange = { usernameInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Enter farmer name", color = Color.Gray) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = { isUserLoggedIn = true },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                        ) {
+                            Text("Create Farmer Account", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Active viewport indicator: Home resets to primary dashboard.
+            Text(
+                text = when (activeViewport) {
+                    "market" -> "📊 Viewport: Market Overview • $selectedLanguage"
+                    "weather" -> "🌦 Viewport: Weather Terminal • $selectedLanguage"
+                    else -> "🏠 Viewport: Home Dashboard • $selectedLanguage"
+                },
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isDarkTheme) Color.White else Color(0xFF2C2C2E),
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
@@ -969,20 +1189,31 @@ fun PremiumMarketAnalyzerScreen() {
                                                             .build()
                                                         imageAnalyzer.setAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
                                                             try {
-                                                                val now = SystemClock.uptimeMillis()
-                                                                if (now - lastFrameMs[0] >= 1500L) {
-                                                                    lastFrameMs[0] = now
-                                                                    val bitmap = TfliteLeafAnalyzer.imageProxyToBitmap(imageProxy)
-                                                                    if (bitmap != null) {
+                                                                try {
+                                                                    val now = SystemClock.uptimeMillis()
+                                                                    if (now - lastFrameMs[0] >= 1500L) {
+                                                                        lastFrameMs[0] = now
+                                                                        val bitmap = TfliteLeafAnalyzer.imageProxyToBitmap(imageProxy)
+                                                                            ?: throw ImageProcessingException("Leaf frame decode returned null")
                                                                         val result = TfliteLeafAnalyzer.classify(bitmap, tfliteInterpreter)
                                                                         liveDiagnosis = result.label
                                                                         liveConfidence = result.confidence
                                                                         liveSource = result.source
+                                                                        scannerError = null
                                                                     }
+                                                                } catch (e: ImageProcessingException) {
+                                                                    scannerError = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
+                                                                } catch (e: IllegalStateException) {
+                                                                    scannerError = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
                                                                 }
                                                             } catch (e: Exception) {
+                                                                scannerError = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
                                                             } finally {
-                                                                imageProxy.close()
+                                                                try {
+                                                                    imageProxy.close()
+                                                                } catch (e: Exception) {
+                                                                    scannerError = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
+                                                                }
                                                             }
                                                         }
                                                         provider.unbindAll()
@@ -1045,6 +1276,24 @@ fun PremiumMarketAnalyzerScreen() {
                                 }
                                 // Live on-device lens verdict, swapped in as frames classify.
                                 Spacer(modifier = Modifier.height(10.dp))
+                                if (scannerError != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFFFDECEA), RoundedCornerShape(8.dp))
+                                            .border(1.dp, Color(0xFFE57373), RoundedCornerShape(8.dp))
+                                            .padding(10.dp)
+                                    ) {
+                                        Text(
+                                            scannerError ?: "",
+                                            color = Color(0xFFB71C1C),
+                                            fontSize = 13.sp,
+                                            lineHeight = 18.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                }
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
