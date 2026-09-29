@@ -3,6 +3,7 @@ package com.example.m_agrilink.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.location.LocationManager
 import android.net.Uri
 import android.provider.Settings
@@ -14,6 +15,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +62,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,12 +78,28 @@ private data class ForecastDay(
     val rainPct: Int
 )
 
+private fun dayAdvisory(day: ForecastDay, county: String): String {
+    val place = county.ifBlank { "Tana River" }
+    return when {
+        day.rainPct >= 50 -> "🌧️ ${day.weekday} in $place: Heavy rain risk (${day.rainPct}%). Max ${day.maxC}°C / Min ${day.minC}°C. " +
+            "Avoid spraying; clear drainage furrows, delay fertilizer, keep harvested grain under 13.5% moisture. Scout for fungal pressure morning and evening."
+        day.rainPct >= 30 -> "🌦️ ${day.weekday} in $place: Moderate showers likely (${day.rainPct}%). Max ${day.maxC}°C / Min ${day.minC}°C. " +
+            "Spray only in dry morning window, wear protective gear, mulch to stop splash-borne disease. Ideal for transplanting after rain settles."
+        day.iconKind == "sun" && day.maxC >= 28 -> "☀️ ${day.weekday} in $place: Hot and dry. Max ${day.maxC}°C / Min ${day.minC}°C, rain ${day.rainPct}%. " +
+            "Irrigate early morning, mulch heavily, provide shade/water for cattle and poultry. Good day for drying grain and spraying before wind picks up."
+        else -> "⛅ ${day.weekday} in $place: Mild conditions. Max ${day.maxC}°C / Min ${day.minC}°C, rain ${day.rainPct}%. " +
+            "Good window for weeding, scouting pests, and applying protective anti-fungal treatments in the calm morning hours."
+    }
+}
+
 @Composable
 fun WeatherTerminalScreen(
     county: String = "Tana River",
+    isDarkTheme: Boolean = false,
     onClose: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val fusedClient = remember(context) {
         LocationServices.getFusedLocationProviderClient(context.applicationContext)
     }
@@ -92,7 +114,48 @@ fun WeatherTerminalScreen(
     }
     var showLocationDialog by remember { mutableStateOf(!hasFineLocation) }
     var latLon by remember { mutableStateOf<String?>(null) }
+    var precisePlace by remember { mutableStateOf<String?>(null) }
+    var resolvingPlace by remember { mutableStateOf(false) }
     var gpsEnabled by remember { mutableStateOf(true) }
+
+    fun resolvePrecisePlace(lat: Double, lon: Double) {
+        if (resolvingPlace) return
+        resolvingPlace = true
+        scope.launch(Dispatchers.IO) {
+            val label = try {
+                @Suppress("DEPRECATION")
+                val results = Geocoder(context.applicationContext, Locale.getDefault())
+                    .getFromLocation(lat, lon, 1)
+                val a = results?.firstOrNull()
+                if (a == null) {
+                    null
+                } else {
+                    // Prefer street-level detail: subLocality (e.g. Westlands)
+                    // + locality/county (e.g. Nairobi).
+                    val city = a.locality ?: a.subAdminArea ?: a.adminArea
+                    val hood = a.subLocality ?: a.thoroughfare ?: a.featureName
+                    when {
+                        city != null && hood != null && !hood.equals(city, ignoreCase = true) -> "$city • $hood"
+                        city != null -> city
+                        hood != null -> hood
+                        a.adminArea != null -> a.adminArea
+                        else -> null
+                    }
+                }
+            } catch (e: Exception) {
+                null
+            }
+            withContext(Dispatchers.Main) {
+                if (label != null) precisePlace = label
+                resolvingPlace = false
+            }
+        }
+    }
+
+    fun onGpsFix(lat: Double, lon: Double) {
+        latLon = String.format(Locale.US, "%.4f, %.4f", lat, lon)
+        resolvePrecisePlace(lat, lon)
+    }
 
     fun refreshGpsState() {
         val lm = context.getSystemService(LocationManager::class.java)
@@ -109,11 +172,7 @@ fun WeatherTerminalScreen(
             refreshGpsState()
             try {
                 fusedClient.lastLocation.addOnSuccessListener { loc ->
-                    latLon = if (loc != null) {
-                        String.format(Locale.US, "%.4f, %.4f", loc.latitude, loc.longitude)
-                    } else {
-                        null
-                    }
+                    if (loc != null) onGpsFix(loc.latitude, loc.longitude) else latLon = null
                 }
             } catch (e: SecurityException) {
                 latLon = null
@@ -127,11 +186,7 @@ fun WeatherTerminalScreen(
             showLocationDialog = false
             try {
                 fusedClient.lastLocation.addOnSuccessListener { loc ->
-                    latLon = if (loc != null) {
-                        String.format(Locale.US, "%.4f, %.4f", loc.latitude, loc.longitude)
-                    } else {
-                        null
-                    }
+                    if (loc != null) onGpsFix(loc.latitude, loc.longitude) else latLon = null
                 }
             } catch (e: SecurityException) {
                 latLon = null
@@ -233,8 +288,21 @@ fun WeatherTerminalScreen(
             ForecastDay("Sunday", "cloud", 27, 19, 20)
         )
     }
+    var selectedDay by remember { mutableStateOf<ForecastDay?>(null) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        // Dedicated page back navigation (separate from Home).
+        if (onClose != null) {
+            Button(
+                onClick = onClose,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1E))
+            ) {
+                Text("← Back to Home Dashboard", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
         // 2. Living weather container with premium graphics.
         Box(
             modifier = Modifier
@@ -267,7 +335,9 @@ fun WeatherTerminalScreen(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    county.ifBlank { "Tana River" } + (if (latLon != null) " • $latLon" else ""),
+                    (precisePlace ?: county.ifBlank { "Tana River" }) +
+                        (if (resolvingPlace) " • locating…" else "") +
+                        (if (latLon != null) " • $latLon" else ""),
                     color = Color(0xFFDCE6F5),
                     fontSize = 12.sp
                 )
@@ -300,7 +370,7 @@ fun WeatherTerminalScreen(
                         .padding(10.dp)
                 ) {
                     Text(
-                        "🌱 Weather Advisory: High ambient humidity detected across ${county.ifBlank { "Tana River" }}. Ideal morning window open for protective anti-fungal treatments before wind speed accelerates.",
+                        "🌱 Weather Advisory: High ambient humidity detected across ${precisePlace ?: county.ifBlank { "Tana River" }}. Ideal morning window open for protective anti-fungal treatments before wind speed accelerates.",
                         color = Color.White,
                         fontSize = 13.sp,
                         lineHeight = 18.sp
@@ -389,7 +459,7 @@ fun WeatherTerminalScreen(
             "📅 7-Day Extended Forecast",
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.Black,
+            color = if (isDarkTheme) Color.White else Color.Black,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
         Row(
@@ -400,9 +470,12 @@ fun WeatherTerminalScreen(
         ) {
             forecast.forEach { day ->
                 Card(
+                    onClick = { selectedDay = day },
                     modifier = Modifier.width(140.dp).shadow(3.dp, RoundedCornerShape(14.dp)),
                     shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (selectedDay?.weekday == day.weekday) Color(0xFFFFF8E1) else Color.White
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(12.dp),
@@ -444,9 +517,48 @@ fun WeatherTerminalScreen(
                             color = Color(0xFF1E3A8A),
                             fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Tap for details →",
+                            fontSize = 10.sp,
+                            color = Color.Gray
+                        )
                     }
                 }
             }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        selectedDay?.let { day ->
+            AlertDialog(
+                onDismissRequest = { selectedDay = null },
+                title = { Text("📅 ${day.weekday} — Full Weather Details", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+                text = {
+                    Column {
+                        Text(
+                            "🌡️ Max: ${day.maxC}°C / Min: ${day.minC}°C",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = Color.Black
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("☔ Rain probability: ${day.rainPct}%", fontSize = 13.sp, color = Color(0xFF1E3A8A))
+                        Text("💧 Humidity: 65% • 💨 Wind: 12 km/h", fontSize = 13.sp, color = Color.DarkGray)
+                        Text("🌅 Sunrise 06:18 AM • 🌇 Sunset 06:27 PM", fontSize = 13.sp, color = Color.DarkGray)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(dayAdvisory(day, county), fontSize = 13.sp, lineHeight = 19.sp, color = Color.Black)
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { selectedDay = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A))
+                    ) {
+                        Text("Got it", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            )
         }
     }
 }

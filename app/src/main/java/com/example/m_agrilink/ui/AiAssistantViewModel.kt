@@ -26,6 +26,21 @@ class AiAssistantViewModel : ViewModel() {
     private var consecutiveFailures = 0
     private var probeStarted = false
 
+    companion object {
+        const val BUILDER_BIO = "I was built and engineered by Lead Architect Levis Lekesio — " +
+            "currently based in Marigat. He studied at Maasai Mara College, Narok, " +
+            "and is pretty good at all IT works including Computer Networking, Softwares and Hardwares."
+    }
+
+    private fun isBuilderQuestion(inquiry: String): Boolean {
+        val q = inquiry.lowercase()
+        return (q.contains("who built") || q.contains("who created") ||
+            q.contains("who made") || q.contains("who developed") ||
+            q.contains("your builder") || q.contains("your creator") ||
+            q.contains("your developer") || q.contains("your architect") ||
+            (q.contains("who are you") && (q.contains("built") || q.contains("made") || q.contains("created"))))
+    }
+
     init {
         messages.add(
             ChatMessage(
@@ -69,6 +84,14 @@ class AiAssistantViewModel : ViewModel() {
         if (inquiry.isBlank()) return
 
         messages.add(ChatMessage(inquiry, isUser = true))
+
+        // Local builder identity (works online and offline, no network needed).
+        if (isBuilderQuestion(inquiry)) {
+            consecutiveFailures = 0
+            engineStatus = EngineStatus.ONLINE
+            messages.add(ChatMessage("👨‍🌾 $BUILDER_BIO 🌱", isUser = false))
+            return
+        }
 
         if (BuildConfig.GEMINI_API_KEY.isBlank()) {
             messages.add(
@@ -151,6 +174,10 @@ class AiAssistantViewModel : ViewModel() {
      * get pricing + agronomy; anything else gets a contextual KALRO template.
      */
     private fun offlineExpertBrief(telemetry: TelemetryContext): String {
+        val lastUser = messages.lastOrNull { it.isUser }?.text.orEmpty()
+        if (isBuilderQuestion(lastUser)) {
+            return "👨‍🌾 $BUILDER_BIO 🌱"
+        }
         val crop = telemetry.cropVariety.ifBlank { "Maize" }.trim()
         val county = telemetry.location.ifBlank { "Baringo" }.trim()
         val record = try {

@@ -49,6 +49,7 @@ import android.net.Uri
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.util.Size
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -75,6 +76,65 @@ private const val ARCHITECT_ATTRIBUTION =
 
 class ImageProcessingException(message: String) : Exception(message)
 
+/** Dynamic crop diagnostic lookup: no hardcoded maize fallback. */
+private fun cropScanKey(raw: String): String = raw.trim().lowercase()
+
+private fun cropDiagnosticTitle(
+    plantedCrop: String,
+    liveDiagnosis: String,
+    confidencePct: Int,
+    source: String
+): String {
+    if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
+        val name = plantedCrop.trim().ifBlank { "Crop" }
+        return "✅ DIAGNOSIS: $name looks healthy ($confidencePct% confidence via $source)."
+    }
+    return when (cropScanKey(plantedCrop)) {
+        "mango" -> "🎯 DIAGNOSIS: Mango Fruit Fly (Bactrocera dorsalis) damage detected on skin surfaces."
+        "beans", "bean" -> "🎯 DIAGNOSIS: Bean Fly (Ophiomyia phaseoli) stem tunneling or Black Bean Aphid clustering detected."
+        "maize" -> "🎯 DIAGNOSIS: $liveDiagnosis detected ($confidencePct% confidence via $source) — Fall Armyworm (Spodoptera frugiperda) protocol."
+        else -> {
+            val label = plantedCrop.trim().ifBlank { liveDiagnosis }
+            if (label.isBlank()) "🎯 DIAGNOSIS: General foliar anomaly detected."
+            else "🎯 DIAGNOSIS: General Foliar/Leaf spot anomaly detected for ${label.uppercase()}"
+        }
+    }
+}
+
+private fun cropDiagnosticBody(plantedCrop: String): List<String> {
+    return when (cropScanKey(plantedCrop)) {
+        "mango" -> listOf(
+            "🌿 MANAGEMENT ADVISORY: Do not apply heavy chemical sprays near harvesting. Hang localized methyl eugenol pheromone traps at canopy level (10 traps per acre) to trap male flies. Collect and bury all fallen fruits at least 2 feet deep or seal them inside black plastic bags under the sun for few days to completely suffocate larvae and break the pest's lifecycle."
+        )
+        "beans", "bean" -> listOf(
+            "🌿 MANAGEMENT ADVISORY: Earth up soil around the plant stems during weeding to encourage adventitious root growth. For severe aphid attacks, spray natural neem seed kernel extracts or potassium-soap solutions early in the morning before bees become active."
+        )
+        "maize" -> listOf(
+            "🌿 PUSH-PULL BIOLOGICAL STRATEGY (icipe Kenya): Intercrop your maize rows cleanly with Desmodium (repels the moths away via chemical volatilization) and plant Napier Grass or Brachiaria along your field perimeters as an attractive trap crop. This method cuts pest pressure by over 70% naturally.",
+            "🐛 SCOUTING & CULTURAL REMEDIES (CABI Plantwise): Perform structural field scouting twice a week. Handpick and destroy visible egg masses or caterpillars immediately. Crushing caterpillars against leaf whorls prevents secondary lifecycle generations.",
+            "🧪 TIMED CHEMICAL EMERGENCY ACTION (CIMMYT & FAO): If leaf damage indices surpass a 20% infestation threshold across young stalks, apply targeted bio-rationals or registered chemical options such as Spinetoram or Spinosad directly down into the whorls. Alternate chemical classes to completely halt pest resistance build-up."
+        )
+        else -> listOf(
+            "🌿 MANAGEMENT ADVISORY: Maintain proper plant row spacing to improve air circulation and reduce leaf wetness. Prune infected lower leaves immediately. Avoid overhead irrigation during cold evenings to limit fungal spore tracking across your plot."
+        )
+    }
+}
+
+private fun cropFullAdvisoryText(
+    plantedCrop: String,
+    liveDiagnosis: String,
+    confidencePct: Int,
+    source: String
+): String {
+    val title = cropDiagnosticTitle(plantedCrop, liveDiagnosis, confidencePct, source)
+    val body = if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
+        listOf("🌿 PREVENTIVE CARE: Keep scouting twice weekly, clear weeds and debris around the base, mulch to hold moisture, and watch leaf edges after humid nights. Retake the scan if spots, holes, or yellowing appear.")
+    } else {
+        cropDiagnosticBody(plantedCrop)
+    }
+    return (listOf(title) + body).joinToString("\n\n")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PremiumMarketAnalyzerScreen() {
@@ -91,7 +151,7 @@ fun PremiumMarketAnalyzerScreen() {
     var diseaseScanComplete by remember { mutableStateOf(false) }
     var isAnalyzing by remember { mutableStateOf(false) }
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
-    var liveDiagnosis by remember { mutableStateOf("Point the lens at a maize leaf…") }
+    var liveDiagnosis by remember { mutableStateOf("Point the lens at a crop leaf…") }
     var liveConfidence by remember { mutableStateOf(0f) }
     var liveSource by remember { mutableStateOf("on-device analyzer") }
     var analyzerAttached by remember { mutableStateOf(false) }
@@ -115,6 +175,20 @@ fun PremiumMarketAnalyzerScreen() {
             "viewport" to "home",
             "engine" to "M-AgriLink offline cache"
         )
+    }
+
+    // System back button: step back through scanner -> chat -> weather page
+    // instead of exiting the app from a sub-page.
+    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather") {
+        when {
+            isScanningForDisease -> {
+                isScanningForDisease = false
+                diseaseScanComplete = false
+                isAnalyzing = false
+            }
+            showShambaChat -> showShambaChat = false
+            activeViewport == "weather" -> activeViewport = "home"
+        }
     }
 
     // --- 1. TEXT-TO-SPEECH CODES CONTROLLER (Swahili/English accessibility) ---
@@ -348,6 +422,10 @@ fun PremiumMarketAnalyzerScreen() {
 
     Scaffold { scaffoldPadding ->
         val canvasBackground = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F6F8)
+        // Dark-mode legible text for labels drawn directly on the canvas
+        // (cards stay white with dark text, so they are untouched).
+        val contentPrimary = if (isDarkTheme) Color.White else Color(0xFF2C2C2E)
+        val contentAccent = if (isDarkTheme) Color(0xFFE6B325) else Color(0xFFA75D5D)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -603,21 +681,22 @@ fun PremiumMarketAnalyzerScreen() {
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
             )
 
-            // Linked Weather Terminal screen (Top Navigation -> Weather Terminal).
+            // Dedicated Weather Terminal page (separate from Home page).
             if (activeViewport == "weather") {
                 WeatherTerminalScreen(
                     county = selectedCounty.ifBlank { "Tana River" },
+                    isDarkTheme = isDarkTheme,
                     onClose = { activeViewport = "home" }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-            }
+            } else {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
                 text = "Target County Corridor Hub",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C2C2E),
+                color = contentPrimary,
                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
             )
 
@@ -676,7 +755,7 @@ fun PremiumMarketAnalyzerScreen() {
                 text = "🌱 What Crop Have You Planted?",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C2C2E),
+                color = contentPrimary,
                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
             )
 
@@ -725,7 +804,7 @@ fun PremiumMarketAnalyzerScreen() {
                 Text(
                     text = "🔍 Showing results for \"${cropMatch.canonical}\" (you typed \"${cropMatch.original}\")",
                     fontSize = 12.sp,
-                    color = Color(0xFFA75D5D),
+                    color = contentAccent,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(start = 4.dp)
                 )
@@ -737,7 +816,7 @@ fun PremiumMarketAnalyzerScreen() {
                     text = "⏱ My recent crops",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2C2C2E),
+                    color = contentPrimary,
                     modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
                 )
                 Row(
@@ -1074,8 +1153,11 @@ fun PremiumMarketAnalyzerScreen() {
                         onClick = {
                             diseaseScanComplete = false
                             isAnalyzing = false
-                            scanResult =
-                                "Mock AI scan: No Maize Lethal Necrosis detected. Suspected Fall Armyworm risk 12% — scout field edges."
+                            scanResult = null
+                            liveDiagnosis = "Point the lens at a ${farmerPlantedCrop.trim().ifBlank { "crop" }} leaf…"
+                            liveConfidence = 0f
+                            liveSource = "on-device analyzer"
+                            scannerError = null
                             if (hasCameraPermission) {
                                 isScanningForDisease = true
                             } else {
@@ -1204,11 +1286,18 @@ fun PremiumMarketAnalyzerScreen() {
                                                                         lastFrameMs[0] = now
                                                                         val bitmap = TfliteLeafAnalyzer.imageProxyToBitmap(imageProxy)
                                                                             ?: throw ImageProcessingException("Leaf frame decode returned null")
-                                                                        val result = TfliteLeafAnalyzer.classify(bitmap, tfliteInterpreter)
-                                                                        liveDiagnosis = result.label
-                                                                        liveConfidence = result.confidence
-                                                                        liveSource = result.source
-                                                                        scannerError = null
+                                                                        val smart = TfliteLeafAnalyzer.classifySmart(bitmap, tfliteInterpreter)
+                                                                        if (smart.quality.usable) {
+                                                                            liveDiagnosis = smart.diagnosis.label
+                                                                            liveConfidence = smart.diagnosis.confidence
+                                                                            liveSource = smart.diagnosis.source
+                                                                            scannerError = null
+                                                                        } else {
+                                                                            liveDiagnosis = smart.diagnosis.label
+                                                                            liveConfidence = smart.diagnosis.confidence
+                                                                            liveSource = smart.diagnosis.source
+                                                                            scannerError = smart.quality.guidance
+                                                                        }
                                                                     }
                                                                 } catch (e: ImageProcessingException) {
                                                                     scannerError = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
@@ -1326,11 +1415,24 @@ fun PremiumMarketAnalyzerScreen() {
                                         )
                                     }
                                 }
-                                // Background coroutine simulates parsing the imagery nodes.
+                                // Capture gate: only a valid leaf frame completes the scan.
+                                // Dark / blurry / non-leaf frames stay in retake mode.
                                 LaunchedEffect(isAnalyzing) {
                                     if (isAnalyzing) {
                                         delay(2500)
-                                        diseaseScanComplete = true
+                                        val invalid = scannerError != null ||
+                                            liveConfidence < 0.55f ||
+                                            liveDiagnosis.startsWith("Invalid") ||
+                                            liveDiagnosis.startsWith("Uncertain") ||
+                                            liveDiagnosis.startsWith("Point the lens")
+                                        if (invalid) {
+                                            if (scannerError == null) {
+                                                scannerError = "⚠️ Scanner Alert: Scan unclear — clean the lens, improve lighting, point at a crop leaf filling the frame, and tap capture again."
+                                            }
+                                            diseaseScanComplete = false
+                                        } else {
+                                            diseaseScanComplete = true
+                                        }
                                         isAnalyzing = false
                                     }
                                 }
@@ -1352,12 +1454,21 @@ fun PremiumMarketAnalyzerScreen() {
                                     )
                                 } else if (!diseaseScanComplete) {
                                     Text(
-                                        "Tap the capture circle to scan leaves with the back camera.",
+                                        "Tap the capture circle to scan ${farmerPlantedCrop.trim().ifBlank { "crop" }} leaves with the back camera.",
                                         color = Color.DarkGray,
                                         fontSize = 13.sp,
                                         lineHeight = 18.sp
                                     )
                                 } else {
+                                    val confidencePct = (liveConfidence * 100).toInt()
+                                    val scanTitle = cropDiagnosticTitle(farmerPlantedCrop, liveDiagnosis, confidencePct, liveSource)
+                                    val scanBody: List<String> =
+                                        if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
+                                            listOf("🌿 PREVENTIVE CARE: Keep scouting twice weekly, clear weeds and debris around the base, mulch to hold moisture, and watch leaf edges after humid nights. Retake the scan if spots, holes, or yellowing appear.")
+                                        } else {
+                                            cropDiagnosticBody(farmerPlantedCrop)
+                                        }
+                                    val scanSpeech = cropFullAdvisoryText(farmerPlantedCrop, liveDiagnosis, confidencePct, liveSource)
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1365,37 +1476,51 @@ fun PremiumMarketAnalyzerScreen() {
                                             .padding(12.dp)
                                     ) {
                                         Column {
-                                            Text(
-                                                "🎯 DIAGNOSIS: Advanced Fall Armyworm (Spodoptera frugiperda) infestation detected.",
-                                                color = Color(0xFF2C2C2E),
-                                                fontSize = 13.sp,
-                                                lineHeight = 19.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    scanTitle,
+                                                    color = Color(0xFF2C2C2E),
+                                                    fontSize = 13.sp,
+                                                    lineHeight = 19.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                IconButton(
+                                                    onClick = {
+                                                        if (AppAudioGate.muted) {
+                                                            AppAudioGate.muted = false
+                                                            scanSpeech.chunked(400).forEach { chunk ->
+                                                                textToSpeech?.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
+                                                            }
+                                                        } else {
+                                                            textToSpeech?.stop()
+                                                            AppAudioGate.muted = true
+                                                        }
+                                                    }
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (AppAudioGate.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                                                        contentDescription = "Read scan result aloud",
+                                                        tint = Color(0xFFE6B325)
+                                                    )
+                                                }
+                                            }
                                             Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                "🌿 PUSH-PULL BIOLOGICAL STRATEGY (icipe Kenya): Intercrop your maize rows cleanly with Desmodium (repels the moths away via chemical volatilization) and plant Napier Grass or Brachiaria along your field perimeters as an attractive trap crop. This method cuts pest pressure by over 70% naturally.",
-                                                color = Color(0xFF2C2C2E),
-                                                fontSize = 13.sp,
-                                                lineHeight = 19.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                "🐛 SCOUTING & CULTURAL REMEDIES (CABI Plantwise): Perform structural field scouting twice a week. Handpick and destroy visible egg masses or caterpillars immediately. Crushing caterpillars against leaf whorls prevents secondary lifecycle generations.",
-                                                color = Color(0xFF2C2C2E),
-                                                fontSize = 13.sp,
-                                                lineHeight = 19.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                "🧪 TIMED CHEMICAL EMERGENCY ACTION (CIMMYT & FAO): If leaf damage indices surpass a 20% infestation threshold across young stalks, apply targeted bio-rationals or registered chemical options such as Spinetoram or Spinosad directly down into the whorls. Alternate chemical classes to completely halt pest resistance build-up.",
-                                                color = Color(0xFF2C2C2E),
-                                                fontSize = 13.sp,
-                                                lineHeight = 19.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
+                                            scanBody.forEach { paragraph ->
+                                                Text(
+                                                    paragraph,
+                                                    color = Color(0xFF2C2C2E),
+                                                    fontSize = 13.sp,
+                                                    lineHeight = 19.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
+                                            Spacer(modifier = Modifier.height(2.dp))
                                             Spacer(modifier = Modifier.height(10.dp))
                                             OutlinedButton(
                                                 onClick = {
@@ -1428,8 +1553,20 @@ fun PremiumMarketAnalyzerScreen() {
                     confirmButton = {
                         TextButton(
                             onClick = {
-                                if (diseaseScanComplete) {
-                                    scanResult = "Live lens match: $liveDiagnosis (${(liveConfidence * 100).toInt()}% confidence via $liveSource).\n\n🎯 DIAGNOSIS: Advanced Fall Armyworm (Spodoptera frugiperda) infestation detected.\n\n🌿 PUSH-PULL BIOLOGICAL STRATEGY (icipe Kenya): Intercrop your maize rows cleanly with Desmodium (repels the moths away via chemical volatilization) and plant Napier Grass or Brachiaria along your field perimeters as an attractive trap crop. This method cuts pest pressure by over 70% naturally.\n\n🐛 SCOUTING & CULTURAL REMEDIES (CABI Plantwise): Perform structural field scouting twice a week. Handpick and destroy visible egg masses or caterpillars immediately. Crushing caterpillars against leaf whorls prevents secondary lifecycle generations.\n\n🧪 TIMED CHEMICAL EMERGENCY ACTION (CIMMYT & FAO): If leaf damage indices surpass a 20% infestation threshold across young stalks, apply targeted bio-rationals or registered chemical options such as Spinetoram or Spinosad directly down into the whorls. Alternate chemical classes to completely halt pest resistance build-up."
+                                val valid = diseaseScanComplete &&
+                                    scannerError == null &&
+                                    liveConfidence >= 0.55f &&
+                                    !liveDiagnosis.startsWith("Invalid") &&
+                                    !liveDiagnosis.startsWith("Uncertain") &&
+                                    !liveDiagnosis.startsWith("Point the lens")
+                                if (valid) {
+                                    val confidencePct = (liveConfidence * 100).toInt()
+                                    scanResult = "Live lens match: $liveDiagnosis ($confidencePct% confidence via $liveSource).\n\n" +
+                                        cropFullAdvisoryText(farmerPlantedCrop, liveDiagnosis, confidencePct, liveSource)
+                                } else if (scannerError != null) {
+                                    scanResult = scannerError
+                                } else {
+                                    scanResult = "⚠️ Scan unclear — no valid leaf captured. Clean the lens, improve lighting, point at a crop leaf filling the frame, and launch the scanner again."
                                 }
                                 isScanningForDisease = false
                                 diseaseScanComplete = false
@@ -1489,13 +1626,16 @@ fun PremiumMarketAnalyzerScreen() {
             if (showShambaChat) {
                 Dialog(onDismissRequest = { showShambaChat = false }) {
                     AiChatOverlay(
+                        // Standalone assistant: neutral defaults so replies do not
+                        // depend on dashboard launch inputs (county / crop).
+                        // The user specifies location/crop inside the chat instead.
                         telemetry = TelemetryContext(
-                            location = selectedCounty.ifBlank { "Baringo" },
-                            temp = "$activeTemperature°C",
+                            location = "Kenya",
+                            temp = "—",
                             rainProb = "N/A",
-                            wind = "$activeWindSpeed km/h",
-                            humidity = "$activeHumidity%",
-                            cropVariety = farmerPlantedCrop.ifBlank { "Maize" }
+                            wind = "—",
+                            humidity = "—",
+                            cropVariety = "General"
                         ),
                         onDismiss = { showShambaChat = false }
                     )
@@ -1916,6 +2056,7 @@ fun PremiumMarketAnalyzerScreen() {
         }
 // ⚠️ CRITICAL SPACER BUFFER: Prevents layout elements from crashing into your bottom tab bar icons
             Spacer(modifier = Modifier.height(100.dp))
+            } // end home-page widgets (weather lives on its own page)
         }
     }
     }

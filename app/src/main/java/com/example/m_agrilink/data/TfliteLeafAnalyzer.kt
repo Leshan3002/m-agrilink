@@ -32,6 +32,22 @@ data class LeafDiagnosis(
     val source: String
 )
 
+enum class FrameRejectReason { OK, TOO_DARK, TOO_BRIGHT, BLURRY, NO_LEAF, LOW_CONFIDENCE }
+
+data class FrameQuality(
+    val usable: Boolean,
+    val reason: FrameRejectReason,
+    val brightness01: Float,
+    val greenRatio: Float,
+    val sharpness: Float,
+    val guidance: String
+)
+
+data class SmartDiagnosis(
+    val diagnosis: LeafDiagnosis,
+    val quality: FrameQuality
+)
+
 object TfliteLeafAnalyzer {
 
     const val MODEL_ASSET = "plant_disease_model.tflite"
@@ -105,6 +121,130 @@ object TfliteLeafAnalyzer {
     /** Runs TFLite when available, otherwise the offline heuristic fallback. */
     fun classify(bitmap: Bitmap, interpreter: Interpreter?): LeafDiagnosis {
         return tryRunTflite(bitmap, interpreter) ?: heuristic(bitmap)
+    }
+
+    /**
+     * Smart gate: rejects dark / washed-out / blurry / non-leaf frames BEFORE
+     * any disease label is produced, so a dark image can never return
+     * "Fall Armyworm" advisories. Returns explicit lens/crop guidance instead.
+     */
+    fun assessQuality(bitmap: Bitmap): FrameQuality {
+        return try {
+            val w = 48
+            val h = 48
+            val small = Bitmap.createScaledBitmap(bitmap, w, h, true)
+            val pixels = IntArray(w * h)
+            small.getPixels(pixels, 0, w, 0, 0, w, h)
+            var rSum = 0L
+            var gSum = 0L
+            var bSum = 0L
+            var lumSum = 0.0
+            var darkCount = 0
+            var brightCount = 0
+            val lums = DoubleArray(pixels.size)
+            for (i in pixels.indices) {
+                val p = pixels[i]
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                rSum += r
+                gSum += g
+                bSum += b
+                val lum = 0.299 * r + 0.587 * g + 0.114 * b
+                lums[i] = lum
+                lumSum += lum
+                if (lum < 30.0) darkCount++
+                if (lum > 225.0) brightCount++
+            }
+            val n = pixels.size.toDouble()
+            val mean = lumSum / n
+            var variance = 0.0
+            for (lum in lums) variance += (lum - mean) * (lum - mean)
+            variance /= n
+            val stddev = kotlin.math.sqrt(variance)
+            val rf = rSum / n / 255.0
+            val gf = gSum / n / 255.0
+            val bf = bSum / n / 255.0
+            val greenRatio = (gf / (rf + gf + bf + 1e-6)).toFloat()
+            val brightness01 = (mean / 255.0).toFloat().coerceIn(0f, 1f)
+            val darkFraction = darkCount / n
+            val brightFraction = brightCount / n
+            when {
+                darkFraction > 0.72 || mean < 32.0 -> FrameQuality(
+                    usable = false,
+                    reason = FrameRejectReason.TOO_DARK,
+                    brightness01 = brightness01,
+                    greenRatio = greenRatio,
+                    sharpness = stddev.toFloat(),
+                    guidance = "⚠️ Scanner Alert: Frame too dark — no leaf detail visible. Clean the lens, turn on the light/flash, and point steady at a crop leaf filling the frame, then retry."
+                )
+                brightFraction > 0.72 || mean > 228.0 -> FrameQuality(
+                    usable = false,
+                    reason = FrameRejectReason.TOO_BRIGHT,
+                    brightness01 = brightness01,
+                    greenRatio = greenRatio,
+                    sharpness = stddev.toFloat(),
+                    guidance = "⚠️ Scanner Alert: Frame washed out by glare. Shade the leaf, wipe the lens, hold steady and retry."
+                )
+                stddev < 11.0 -> FrameQuality(
+                    usable = false,
+                    reason = FrameRejectReason.BLURRY,
+                    brightness01 = brightness01,
+                    greenRatio = greenRatio,
+                    sharpness = stddev.toFloat(),
+                    guidance = "⚠️ Scanner Alert: Blurry or covered lens — hold the phone steady, tap to focus, clean the lens, and make the leaf fill the frame."
+                )
+                greenRatio < 0.30 -> FrameQuality(
+                    usable = false,
+                    reason = FrameRejectReason.NO_LEAF,
+                    brightness01 = brightness01,
+                    greenRatio = greenRatio,
+                    sharpness = stddev.toFloat(),
+                    guidance = "⚠️ Scanner Alert: No crop leaf detected. Point the camera at a green maize leaf so it fills the frame — not a dark room, wall, or empty background."
+                )
+                else -> FrameQuality(
+                    usable = true,
+                    reason = FrameRejectReason.OK,
+                    brightness01 = brightness01,
+                    greenRatio = greenRatio,
+                    sharpness = stddev.toFloat(),
+                    guidance = ""
+                )
+            }
+        } catch (e: Exception) {
+            FrameQuality(
+                usable = false,
+                reason = FrameRejectReason.BLURRY,
+                brightness01 = 0f,
+                greenRatio = 0f,
+                sharpness = 0f,
+                guidance = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
+            )
+        }
+    }
+
+    /** Quality-gated classification: invalid frames never produce disease advisories. */
+    fun classifySmart(bitmap: Bitmap, interpreter: Interpreter?): SmartDiagnosis {
+        val quality = assessQuality(bitmap)
+        if (!quality.usable) {
+            return SmartDiagnosis(
+                LeafDiagnosis("Invalid frame — retake", 0f, "quality gate"),
+                quality
+            )
+        }
+        val result = tryRunTflite(bitmap, interpreter) ?: heuristic(bitmap)
+        if (result.confidence < 0.55f) {
+            val gated = quality.copy(
+                usable = false,
+                reason = FrameRejectReason.LOW_CONFIDENCE,
+                guidance = "⚠️ Scanner Alert: Scan unclear (low confidence ${(result.confidence * 100).toInt()}%). Clean the lens, improve lighting, move closer so the leaf fills the frame, and retry."
+            )
+            return SmartDiagnosis(
+                LeafDiagnosis("Uncertain — retake", result.confidence, result.source),
+                gated
+            )
+        }
+        return SmartDiagnosis(result, quality)
     }
 
     private fun tryRunTflite(bitmap: Bitmap, interpreter: Interpreter?): LeafDiagnosis? {
