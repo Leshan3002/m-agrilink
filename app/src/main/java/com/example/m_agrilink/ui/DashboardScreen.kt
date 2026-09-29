@@ -197,6 +197,14 @@ private fun speakOverviewSegments(
         segments.addAll(extra)
     }
     segments.add("Let's optimize. Are you growing these crops in a small home garden plot or a large-scale commercial orchard? Let Shamba A I know so we can suggest tailored systemic organic treatment blends matching your growing scale.")
+    try {
+        val grounded = MarketDataRepository.getPestAdvisory(plantedCrop.ifBlank { liveDiagnosis })
+        grounded.cardLines().forEach { line ->
+            segments.add(line.replace(Regex("[💡🌱🧪•]"), "").trim())
+        }
+    } catch (e: Exception) {
+    }
+    segments.add("Validated against Cabi Plantwise Bank, icipe Kenya, and U N F A O and Kalro guidance. Spoken by Shamba A I, proudly created by master creator Levis Lekesio.")
     segments.forEachIndexed { index, part ->
         part.chunked(400).forEach { chunk ->
             try {
@@ -346,6 +354,33 @@ private fun ScanOverviewCard(
                 )
             }
         }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "✅ VALIDATED CONTROL (KALRO • CABI • icipe • FAO)",
+            color = Color(0xFF1B5E20),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.5.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        MarketDataRepository.getPestAdvisory(plantedCrop.ifBlank { liveDiagnosis }).cardLines().forEach { line ->
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                Text(
+                    text = "• ",
+                    color = Color(0xFF2E7D32),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = line,
+                    color = Color(0xFF2C2C2E),
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(10.dp))
         Box(
             modifier = Modifier
@@ -360,6 +395,184 @@ private fun ScanOverviewCard(
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
                 fontWeight = FontWeight.Medium
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Validated against CABI Plantwise Bank • icipe Kenya • UN FAO & KALRO",
+            color = Color.Gray,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = MarketDataRepository.PLATFORM_CORE_ENGINE_TAG,
+            color = Color.Gray,
+            fontSize = 10.sp,
+            lineHeight = 14.sp
+        )
+    }
+}
+
+/**
+ * Dedicated Market Overview page (app core: market trends & analysis).
+ * Ranks every crop in the corridor with margins, verdicts, and outlook.
+ */
+@Composable
+private fun MarketOverviewPage(
+    selectedCounty: String,
+    countyData: List<com.example.m_agrilink.data.CropMarketRecord>,
+    contentPrimary: Color,
+    isDarkTheme: Boolean,
+    onBack: () -> Unit,
+    onSelectCounty: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1E))
+        ) {
+            Text("← Back to Home Dashboard", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "📊 Market Overview — ${selectedCounty.ifBlank { "Select a county" }}",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = contentPrimary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = MarketDataRepository.marketOutlook(selectedCounty, countyData),
+            fontSize = 13.sp,
+            lineHeight = 19.sp,
+            color = if (isDarkTheme) Color(0xFFD9D9E0) else Color.DarkGray
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("Baringo", "Nairobi", "Nakuru", "Uasin Gishu", "Mombasa").forEach { hub ->
+                val selected = selectedCounty == hub
+                Button(
+                    onClick = { onSelectCounty(hub) },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selected) Color(0xFFE6B325) else Color.White
+                    )
+                ) {
+                    Text(
+                        hub,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        if (countyData.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Text(
+                    text = "Pick a county hub above (or on Home) to rank Maize, Beans, Onions and Sorghum by live corridor margin.",
+                    color = Color.Black,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    modifier = Modifier.padding(20.dp)
+                )
+            }
+        } else {
+            val ranked = countyData.sortedByDescending { it.netMarginKes }
+            val best = ranked.firstOrNull()
+            if (best != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFE8F5E9), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFF2E7D32), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "🏆 Best corridor deal: ${best.cropName} — Local KES ${best.localPriceKes} → Hub KES ${best.hubPriceKes} (net +KES ${best.netMarginKes}/bag). ${MarketDataRepository.marketVerdict(best)}.",
+                        color = Color(0xFF1B5E20),
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+            ranked.forEachIndexed { index, crop ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().shadow(3.dp, RoundedCornerShape(14.dp)),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "#${index + 1} ${crop.cropName} (${crop.unit})",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        if (crop.netMarginKes >= 0) Color(0xFFE8F5E9) else Color(0xFFFDECEA),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "${if (crop.netMarginKes >= 0) "+" else ""}KES ${crop.netMarginKes} net",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (crop.netMarginKes >= 0) Color(0xFF1B5E20) else Color(0xFFB71C1C)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Local KES ${crop.localPriceKes} → Hub KES ${crop.hubPriceKes} (gross +KES ${crop.grossMarginKes}, transit KES 350)",
+                            fontSize = 12.sp,
+                            color = Color.DarkGray
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            MarketDataRepository.marketVerdict(crop),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1B5E20)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Source: M-AgriLink offline corridor matrix (KALRO baseline), 47-county pricing engine.",
+                            fontSize = 10.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+            Text(
+                text = MarketDataRepository.PLATFORM_CORE_ENGINE_TAG,
+                color = Color.Gray,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier.padding(start = 4.dp)
             )
         }
     }
@@ -402,6 +615,7 @@ fun PremiumMarketAnalyzerScreen() {
     val systemMetadata = remember {
         mapOf(
             "architect" to ARCHITECT_ATTRIBUTION,
+            "platform" to MarketDataRepository.PLATFORM_CORE_ENGINE_TAG,
             "viewport" to "home",
             "engine" to "M-AgriLink offline cache"
         )
@@ -580,9 +794,9 @@ fun PremiumMarketAnalyzerScreen() {
         }
     }
 
-    // System back button: step back through scanner -> chat -> weather page
+    // System back button: step back through scanner -> chat -> market/weather pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather") {
+    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market") {
         when {
             isScanningForDisease -> {
                 isScanningForDisease = false
@@ -592,7 +806,7 @@ fun PremiumMarketAnalyzerScreen() {
                 galleryBitmap = null
             }
             showShambaChat -> showShambaChat = false
-            activeViewport == "weather" -> activeViewport = "home"
+            activeViewport == "weather" || activeViewport == "market" -> activeViewport = "home"
         }
     }
 
@@ -1000,6 +1214,18 @@ fun PremiumMarketAnalyzerScreen() {
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
             )
 
+            // Dedicated Market Overview page (app core: market trends & analysis).
+            if (activeViewport == "market") {
+                MarketOverviewPage(
+                    selectedCounty = selectedCounty,
+                    countyData = countyData,
+                    contentPrimary = contentPrimary,
+                    isDarkTheme = isDarkTheme,
+                    onBack = { activeViewport = "home" },
+                    onSelectCounty = { selectedCounty = it }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
             // Dedicated Weather Terminal page (separate from Home page).
             if (activeViewport == "weather") {
                 WeatherTerminalScreen(
@@ -1008,7 +1234,8 @@ fun PremiumMarketAnalyzerScreen() {
                     onClose = { activeViewport = "home" }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-            } else {
+            }
+            if (activeViewport != "weather" && activeViewport != "market") {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
@@ -1112,7 +1339,7 @@ fun PremiumMarketAnalyzerScreen() {
                             crop,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (cropKey == crop.lowercase()) Color(0xFFA75D5D) else Color.Black
+                            color = if (cropKey == crop.lowercase()) contentAccent else contentPrimary
                         )
                     }
                 }

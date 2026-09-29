@@ -30,6 +30,9 @@ class AiAssistantViewModel : ViewModel() {
         const val BUILDER_BIO = "I was built and engineered by Lead Architect Levis Lekesio — " +
             "currently based in Marigat. He studied at Maasai Mara College, Narok, " +
             "and is pretty good at all IT works including Computer Networking, Softwares and Hardwares."
+        const val MASTER_VOICE_TAG =
+            "Voiced by Shamba AI — master creator Levis Lekesio. " +
+            "M-AgriLink Platform Core Engine — Developed and Directed by Lead System Architect Levis Lekesio. All Rights Reserved."
     }
 
     private fun isBuilderQuestion(inquiry: String): Boolean {
@@ -186,19 +189,23 @@ class AiAssistantViewModel : ViewModel() {
             null
         }
         if (record != null) {
+            val grounded = MarketDataRepository.getPestAdvisory(record.cropName).cardLines().joinToString(" ")
             return "🤖 Shamba Assistant (Offline Mode): I've detected you are managing " +
                 "${record.cropName} in $county with limited connectivity. " +
                 "🚜 Immediate Action: ${record.advisory.plantingSpacing} " +
                 "${record.advisory.landPrep} " +
                 "🌾 Safe Harvesting: ${record.advisory.moistureCeiling} " +
                 "💰 Local market: KES ${record.localPriceKes} → hub KES ${record.hubPriceKes} " +
-                "(net +KES ${record.netMarginKes} per bag)."
+                "(net +KES ${record.netMarginKes} per bag). " +
+                "$grounded " +
+                MASTER_VOICE_TAG
         }
         return "🤖 Shamba Assistant (Offline Mode): I've detected you are managing a " +
             "$crop orchard in $county with limited connectivity. Based on localized KALRO " +
             "data, your main priority right now is scouting twice weekly for pest vectors, " +
             "hanging monitoring traps at canopy level, and clearing fallen fruits and debris " +
             "to break pest lifecycles. Hold harvested produce under the 13.5% moisture ceiling " +
-            "before storage. Reconnect for a full live brief. 🌱"
+            "before storage. Reconnect for a full live brief. 🌱 " +
+            MASTER_VOICE_TAG
     }
 }
