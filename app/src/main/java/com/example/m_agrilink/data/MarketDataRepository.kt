@@ -34,6 +34,13 @@ data class InputPrice(
     val trend: String
 )
 
+data class Transporter(
+    val name: String,
+    val phone: String,
+    val capacity: String,
+    val rateKesPerTon: Int
+)
+
 object MarketDataRepository {
 
     private const val MOISTURE_CEILING = "13.5% safe harvest moisture ceiling (KALRO). Dry grain to ≤13.5% before bagging to prevent aflatoxin/mould."
@@ -190,6 +197,31 @@ object MarketDataRepository {
         val count = 2 + (seed % 5)
         val rate = 1800 + (seed % 2500)
         return "$count Transporters near $town available for transit to Nairobi Hub from KES $rate/ton"
+    }
+
+    /**
+     * Demo transporter directory per county. Numbers are generated demo
+     * contacts (0722-xxxxxx range) so Call/WhatsApp buttons open the dialer
+     * safely; wire to a live directory API when available.
+     */
+    fun getTransporters(countyLabel: String): List<Transporter> {
+        val key = normalizeCounty(countyLabel.ifBlank { "Baringo" })
+        val town = countyTowns[key] ?: "$key Town"
+        val seed = abs(key.hashCode())
+        val fleets = listOf(
+            "$town Lorry SACCO" to "10T",
+            "$town Express Hauliers" to "7T",
+            "Rift Valley Movers ($town)" to "14T"
+        )
+        val baseRate = 1800 + (seed % 2500)
+        return fleets.mapIndexed { i, (name, capacity) ->
+            Transporter(
+                name = name,
+                phone = "0722%06d".format((seed + i * 137) % 1_000_000),
+                capacity = capacity,
+                rateKesPerTon = baseRate + i * 200
+            )
+        }
     }
 
     fun getInputTrends(countyLabel: String): List<InputPrice> {

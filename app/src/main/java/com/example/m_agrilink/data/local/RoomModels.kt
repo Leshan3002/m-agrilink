@@ -67,3 +67,33 @@ data class CropSearchHistory(
     val source: String, // LOCAL, GEMINI, WIKI, CACHE
     val timestamp: Long = System.currentTimeMillis()
 )
+
+/**
+ * 4. LORRY MARKETPLACE (driver-registered lorries + farmer hire tracking).
+ */
+@Entity(tableName = "transporter_profile")
+data class TransporterProfile(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val driverName: String,
+    val phone: String,
+    val capacity: String, // e.g. "10T"
+    val baseTown: String,
+    val route: String, // e.g. "Marigat → Nairobi Hub"
+    val available: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "transport_task",
+    indices = [Index(value = ["status"])]
+)
+data class TransportTask(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val transporterName: String,
+    val phone: String,
+    val crop: String,
+    val fromCounty: String,
+    val toHub: String = "Nairobi Hub",
+    val status: String = "REQUESTED", // REQUESTED, EN_ROUTE, DELIVERED, CANCELLED
+    val updatedAt: Long = System.currentTimeMillis()
+)

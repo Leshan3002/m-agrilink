@@ -12,7 +12,7 @@ playServicesLocation = "21.3.0"
 retrofit = "2.9.0"
 okhttp = "4.12.0"
 camerax = "1.3.4"
-ksp = "2.2.10-1.0.31" # Added for Room compilation
+ksp = "2.2.10-2.0.2" # KSP2 line matching Kotlin 2.2.10 (Room annotation processing)
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

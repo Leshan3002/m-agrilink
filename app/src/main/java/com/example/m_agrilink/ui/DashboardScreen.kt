@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -55,7 +57,11 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import com.example.m_agrilink.data.MarketDataRepository
+import com.example.m_agrilink.data.CropNameNormalizer
 import com.example.m_agrilink.data.TfliteLeafAnalyzer
+import com.example.m_agrilink.data.local.AgriLinkDatabase
+import com.example.m_agrilink.data.local.TransportTask
+import com.example.m_agrilink.data.local.TransporterProfile
 import com.example.m_agrilink.domain.RoomFarmerAccountRepository
 import com.example.m_agrilink.network.CropLiveLookup
 import java.util.Locale
@@ -144,15 +150,16 @@ fun PremiumMarketAnalyzerScreen() {
         }
     }
 
-    val blueprintCrop = remember(farmerPlantedCrop, selectedCounty) {
-        val query = farmerPlantedCrop.trim()
-        if (query.isBlank()) null
+    val cropMatch = remember(farmerPlantedCrop) { CropNameNormalizer.normalize(farmerPlantedCrop) }
+    val cropQuery = cropMatch?.canonical ?: ""
+    val blueprintCrop = remember(cropQuery, selectedCounty) {
+        if (cropQuery.isBlank()) null
         else MarketDataRepository.getCrop(
             selectedCounty.ifBlank { "Baringo" },
-            query
+            cropQuery
         )
     }
-    val cropKey = farmerPlantedCrop.trim().lowercase()
+    val cropKey = cropQuery.lowercase()
     val liveAdvisoryText = when {
         cropKey == "maize" && activeHumidity >= 70 ->
             "High humidity alert (72%) detected across Baringo. Field conditions increase the risk of Gray Leaf Spot fungal strains. Monitor crop leaves closely this week."
@@ -172,14 +179,120 @@ fun PremiumMarketAnalyzerScreen() {
     var liveLoading by remember { mutableStateOf(false) }
     var cropHistory by remember { mutableStateOf(listOf<String>()) }
 
+    // --- LORRY MARKETPLACE RUNTIME (Room-backed registry + task tracking) ---
+    var showRegisterForm by remember { mutableStateOf(false) }
+    var regDriver by remember { mutableStateOf("") }
+    var regPhone by remember { mutableStateOf("") }
+    var regCapacity by remember { mutableStateOf("") }
+    var regTown by remember { mutableStateOf("") }
+    var regRoute by remember { mutableStateOf("") }
+    var registeredLorries by remember { mutableStateOf(listOf<TransporterProfile>()) }
+    var transportTasks by remember { mutableStateOf(listOf<TransportTask>()) }
+    val transportDao = remember(context) { AgriLinkDatabase.getDatabase(context.applicationContext).transportDao() }
+
+    fun refreshTransport() {
+        scope.launch {
+            val lorries = withContext(Dispatchers.IO) { transportDao.allLorries() }
+            val tasks = withContext(Dispatchers.IO) { transportDao.recentTasks() }
+            registeredLorries = lorries
+            transportTasks = tasks
+        }
+    }
+
+    fun hireTransport(name: String, phone: String) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                transportDao.createTask(
+                    TransportTask(
+                        transporterName = name,
+                        phone = phone,
+                        crop = farmerPlantedCrop.trim().ifBlank { "Produce" },
+                        fromCounty = selectedCounty.ifBlank { "Baringo" }
+                    )
+                )
+            }
+            refreshTransport()
+        }
+    }
+
+    fun advanceTask(task: TransportTask) {
+        val next = when (task.status) {
+            "REQUESTED" -> "EN_ROUTE"
+            "EN_ROUTE" -> "DELIVERED"
+            else -> return
+        }
+        scope.launch {
+            withContext(Dispatchers.IO) { transportDao.setTaskStatus(task.id, next) }
+            refreshTransport()
+        }
+    }
+
+    fun cancelTask(task: TransportTask) {
+        scope.launch {
+            withContext(Dispatchers.IO) { transportDao.setTaskStatus(task.id, "CANCELLED") }
+            refreshTransport()
+        }
+    }
+
+    fun dialPhone(phone: String) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
+        } catch (e: Exception) {
+        }
+    }
+
+    fun whatsappTransport(name: String, phone: String, capacity: String) {
+        try {
+            val digits = phone.filter { it.isDigit() }
+            val waNumber = if (digits.startsWith("0")) "254" + digits.drop(1) else digits
+            val message = Uri.encode(
+                "Hello $name! I need a $capacity lorry " +
+                    "from ${selectedCounty.ifBlank { "Baringo" }} for farm produce. " +
+                    "Please share availability and rate."
+            )
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waNumber?text=$message"))
+            )
+        } catch (e: Exception) {
+        }
+    }
+
+    @Composable
+    fun lorryField(value: String, onValue: (String) -> Unit, hint: String) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValue,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text(hint, color = Color.Gray) },
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White,
+                focusedTextColor = Color.Black,
+                unfocusedTextColor = Color.Black,
+                focusedBorderColor = Color(0xFFE6B325),
+                unfocusedBorderColor = Color(0xFFE6B325)
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
     LaunchedEffect(Unit) {
         cropHistory = accountRepo.recentCrops()
+    }
+
+    // Pre-warm Shamba at launch so the AI is ready before the chat opens.
+    val shambaWarmup: AiAssistantViewModel = viewModel()
+    LaunchedEffect(Unit) {
+        shambaWarmup.probeEngine()
     }
 
     // Any-crop live brief: local 4 crops render instantly, everything else
     // resolves via cache -> Gemini -> Wikipedia (debounced, stale-guarded).
     LaunchedEffect(cropKey, selectedCounty) {
-        val query = farmerPlantedCrop.trim()
+        val query = cropQuery
+        val requestKey = cropKey
         if (query.isBlank()) {
             liveBrief = null
             liveLoading = false
@@ -198,23 +311,38 @@ fun PremiumMarketAnalyzerScreen() {
         } catch (e: Exception) {
             "Live lookup failed. Check your connection and try again." to "OFFLINE"
         }
-        if (query == farmerPlantedCrop.trim()) {
+        if (requestKey == CropNameNormalizer.canonicalOrOriginal(farmerPlantedCrop).lowercase()) {
             liveBrief = text
             briefSource = source
             liveLoading = false
-            if (source == "GEMINI" || source == "WIKI" || source == "CACHE") {
+            if (source == "GEMINI" || source == "OPENFARM" || source == "WIKI" || source == "CACHE") {
                 accountRepo.logCropSearch(query, countyOrDefault, source)
                 cropHistory = accountRepo.recentCrops()
             }
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF4F6F8)) // Modern soft off-white canvas backdrop
-            .verticalScroll(scrollState)
-    ) {
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showShambaChat = true },
+                containerColor = Color(0xFF2E7D32)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Chat,
+                    contentDescription = "Ask Shamba AI",
+                    tint = Color.White
+                )
+            }
+        }
+    ) { scaffoldPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF4F6F8)) // Modern soft off-white canvas backdrop
+                .verticalScroll(scrollState)
+                .padding(bottom = scaffoldPadding.calculateBottomPadding())
+        ) {
         // --- 1. THE STATUS-BAR COMPLIANT HEADER GRADIENT BANNER ---
         Box(
             modifier = Modifier
@@ -363,6 +491,17 @@ fun PremiumMarketAnalyzerScreen() {
                 }
             }
 
+            if (cropMatch?.corrected == true && farmerPlantedCrop.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "🔍 Showing results for \"${cropMatch.canonical}\" (you typed \"${cropMatch.original}\")",
+                    fontSize = 12.sp,
+                    color = Color(0xFFA75D5D),
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+
             if (cropHistory.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -413,15 +552,21 @@ fun PremiumMarketAnalyzerScreen() {
                                 )
                                 IconButton(
                                     onClick = {
-                                        val fullAdvisory = "Audio System Swapped. Now reading comprehensive agricultural parameters for $selectedCounty. Planted crop profile index: Maize variety. Optimal spacing matrix configuration is 75 centimeters by 25 centimeters, placing 1 seed per hole to yield an approximate target of 53,000 healthy plants per acre. KALRO Land preparation rules require deep plowing to 20 to 25 centimeters at the onset of seasonal rainfall patterns, followed by harrowing to a fine tilth. Apply 10 tons per acre of well-decomposed manure combined with 60 kilograms of DAP fertilizer during row sowing operations. Safe harvesting boundaries demand drying grain under 13.5 percent moisture ceiling levels before hermetic storage packaging to prevent aflatoxin or mold contamination completely. Live environment alert: Local ambient humidity is currently holding high at 72 percent across the region, which significantly escalates regional risks for Gray Leaf Spot fungal strains. Farmers are strongly advised to inspect leaf edges daily this week."
-                                        fullAdvisory.chunked(400).forEach { chunk ->
-                                            textToSpeech?.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
+                                        if (AppAudioGate.muted) {
+                                            AppAudioGate.muted = false
+                                            val fullAdvisory = "Audio System Swapped. Now reading comprehensive agricultural parameters for $selectedCounty. Planted crop profile index: Maize variety. Optimal spacing matrix configuration is 75 centimeters by 25 centimeters, placing 1 seed per hole to yield an approximate target of 53,000 healthy plants per acre. KALRO Land preparation rules require deep plowing to 20 to 25 centimeters at the onset of seasonal rainfall patterns, followed by harrowing to a fine tilth. Apply 10 tons per acre of well-decomposed manure combined with 60 kilograms of DAP fertilizer during row sowing operations. Safe harvesting boundaries demand drying grain under 13.5 percent moisture ceiling levels before hermetic storage packaging to prevent aflatoxin or mold contamination completely. Live environment alert: Local ambient humidity is currently holding high at 72 percent across the region, which significantly escalates regional risks for Gray Leaf Spot fungal strains. Farmers are strongly advised to inspect leaf edges daily this week."
+                                            fullAdvisory.chunked(400).forEach { chunk ->
+                                                textToSpeech?.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
+                                            }
+                                        } else {
+                                            textToSpeech?.stop()
+                                            AppAudioGate.muted = true
                                         }
                                     }
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.VolumeUp,
-                                        contentDescription = "Read blueprint aloud",
+                                        imageVector = if (AppAudioGate.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                                        contentDescription = if (AppAudioGate.muted) "Unmute all audio" else "Mute all audio",
                                         tint = Color(0xFFE6B325)
                                     )
                                 }
@@ -513,6 +658,7 @@ fun PremiumMarketAnalyzerScreen() {
                                         Text(
                                             when (briefSource) {
                                                 "GEMINI" -> "✨ GEMINI LIVE"
+                                                "OPENFARM" -> "🌱 OPENFARM"
                                                 "WIKI" -> "🌐 WIKIPEDIA"
                                                 "CACHE" -> "⚡ CACHED"
                                                 else -> briefSource
@@ -1133,7 +1279,10 @@ fun PremiumMarketAnalyzerScreen() {
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
-                        onClick = { logisticsTapped = !logisticsTapped },
+                        onClick = {
+                            logisticsTapped = !logisticsTapped
+                            if (logisticsTapped) refreshTransport()
+                        },
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
@@ -1147,12 +1296,265 @@ fun PremiumMarketAnalyzerScreen() {
                     }
                     if (logisticsTapped) {
                         Spacer(modifier = Modifier.height(10.dp))
+                        if (transportTasks.isNotEmpty()) {
+                            Text(
+                                "🧾 My transport tasks — track your lorry:",
+                                color = Color(0xFFE6B325),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            transportTasks.forEach { task ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xFF2C2C2E), RoundedCornerShape(10.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    Column {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                "${task.transporterName} • ${task.crop}",
+                                                color = Color.White,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(
+                                                        when (task.status) {
+                                                            "EN_ROUTE" -> Color(0xFF64B5F6)
+                                                            "DELIVERED" -> Color(0xFF81C784)
+                                                            "CANCELLED" -> Color.Gray
+                                                            else -> Color(0xFFE6B325)
+                                                        },
+                                                        RoundedCornerShape(8.dp)
+                                                    )
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) {
+                                                Text(
+                                                    task.status.replace("_", " "),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.Black
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            "${task.fromCounty} → ${task.toHub} • ${task.phone}",
+                                            color = Color.LightGray,
+                                            fontSize = 12.sp
+                                        )
+                                        if (task.status == "REQUESTED" || task.status == "EN_ROUTE") {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Button(
+                                                    onClick = { advanceTask(task) },
+                                                    modifier = Modifier.weight(1f).height(40.dp),
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
+                                                ) {
+                                                    Text(
+                                                        if (task.status == "REQUESTED") "🚚 Mark En Route" else "✅ Mark Delivered",
+                                                        color = Color.Black,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.sp
+                                                    )
+                                                }
+                                                TextButton(onClick = { cancelTask(task) }) {
+                                                    Text("Cancel", color = Color.Gray, fontSize = 12.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (registeredLorries.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                "✓ Driver-registered lorries:",
+                                color = Color(0xFFE6B325),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            registeredLorries.forEach { lorry ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xFF2C2C2E), RoundedCornerShape(10.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            "${lorry.driverName} • ${lorry.capacity}",
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            "${lorry.baseTown} • ${lorry.route} • ${lorry.phone}",
+                                            color = Color.LightGray,
+                                            fontSize = 12.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Button(
+                                                onClick = { dialPhone(lorry.phone) },
+                                                modifier = Modifier.weight(1f).height(42.dp),
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
+                                            ) {
+                                                Text("📞 Call", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            }
+                                            OutlinedButton(
+                                                onClick = { whatsappTransport(lorry.driverName, lorry.phone, lorry.capacity) },
+                                                modifier = Modifier.weight(1f).height(42.dp),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("💬 WhatsApp", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            }
+                                            Button(
+                                                onClick = { hireTransport("${lorry.driverName} (${lorry.capacity})", lorry.phone) },
+                                                modifier = Modifier.weight(1f).height(42.dp),
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                                            ) {
+                                                Text("🚜 Hire", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            "Mock contacts: Marigat Lorry SACCO (0722-XXX-XXX) • 10T @ KES 4,500 • 7T @ KES 3,200. Act on your margin above instantly.",
-                            color = Color.LightGray,
+                            "Demo directory — tap Call or WhatsApp to book:",
+                            color = Color(0xFFE6B325),
                             fontSize = 13.sp,
-                            lineHeight = 18.sp
+                            fontWeight = FontWeight.Bold
                         )
+                        MarketDataRepository.getTransporters(selectedCounty).forEach { transporter ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF2C2C2E), RoundedCornerShape(10.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Column {
+                                    Text(
+                                        transporter.name,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "${transporter.capacity} • KES ${transporter.rateKesPerTon}/ton • ${transporter.phone}",
+                                        color = Color.LightGray,
+                                        fontSize = 12.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = { dialPhone(transporter.phone) },
+                                            modifier = Modifier.weight(1f).height(42.dp),
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
+                                        ) {
+                                            Text("📞 Call", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { whatsappTransport(transporter.name, transporter.phone, transporter.capacity) },
+                                            modifier = Modifier.weight(1f).height(42.dp),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Text("💬 WhatsApp", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                        Button(
+                                            onClick = { hireTransport("${transporter.name} (${transporter.capacity})", transporter.phone) },
+                                            modifier = Modifier.weight(1f).height(42.dp),
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                                        ) {
+                                            Text("🚜 Hire", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedButton(
+                            onClick = { showRegisterForm = !showRegisterForm },
+                            modifier = Modifier.fillMaxWidth().height(46.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                if (showRegisterForm) "Close lorry registration" else "＋ Register my lorry (driver)",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (showRegisterForm) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            lorryField(regDriver, { regDriver = it }, "Driver / SACCO name")
+                            lorryField(regPhone, { regPhone = it }, "Phone e.g. 0722000000")
+                            lorryField(regCapacity, { regCapacity = it }, "Capacity e.g. 10T")
+                            lorryField(regTown, { regTown = it }, "Base town e.g. Marigat")
+                            lorryField(regRoute, { regRoute = it }, "Route e.g. Marigat → Nairobi Hub")
+                            Button(
+                                onClick = {
+                                    val town = regTown.trim().ifBlank { selectedCounty.ifBlank { "Baringo" } }
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            transportDao.registerLorry(
+                                                TransporterProfile(
+                                                    driverName = regDriver.trim(),
+                                                    phone = regPhone.trim(),
+                                                    capacity = regCapacity.trim().ifBlank { "10T" },
+                                                    baseTown = town,
+                                                    route = regRoute.trim().ifBlank { "$town → Nairobi Hub" }
+                                                )
+                                            )
+                                        }
+                                        regDriver = ""
+                                        regPhone = ""
+                                        regCapacity = ""
+                                        regTown = ""
+                                        regRoute = ""
+                                        showRegisterForm = false
+                                        refreshTransport()
+                                    }
+                                },
+                                enabled = regDriver.isNotBlank() && regPhone.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
+                            ) {
+                                Text("Save lorry", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
                     }
                 }
             }
@@ -1257,5 +1659,6 @@ fun PremiumMarketAnalyzerScreen() {
 // ⚠️ CRITICAL SPACER BUFFER: Prevents layout elements from crashing into your bottom tab bar icons
             Spacer(modifier = Modifier.height(100.dp))
         }
+    }
     }
 }

@@ -5,14 +5,16 @@ import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.Query
+import retrofit2.http.Url
 
 /**
  * 2. GEMINI FREE TIER RETROFIT CLIENT
- * Retrofit Interface targeting the free-tier API completions endpoint.
+ * Model path is dynamic so the repository can fail over across models.
  */
 interface GeminiClientRoute {
-    @POST("v1beta/models/gemini-3.5-flash-lite:generateContent")
+    @POST
     fun generateContent(
+        @Url modelPath: String,
         @Query("key") apiKey: String,
         @Body request: GeminiRequest
     ): Call<GeminiResponse>

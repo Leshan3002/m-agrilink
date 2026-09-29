@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
 }
 
 // 1. Read the secret API key safely at the top-level scope of the Kotlin DSL file
@@ -101,7 +101,7 @@ dependencies {
     implementation("org.osmdroid:osmdroid-android:6.1.20")
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    "kapt"(libs.room.compiler)
+    ksp(libs.room.compiler)
 
     // Native CameraX field scanner (camera viewport + lifecycle binding)
     implementation(libs.camerax.camera2)

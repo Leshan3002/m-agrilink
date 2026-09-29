@@ -5,23 +5,31 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 
 /**
  * MODULE 2: AI CONTEXTUAL ASSISTANT
@@ -69,6 +77,27 @@ fun AiChatOverlay(
         tonalElevation = 8.dp,
         color = Color.White
     ) {
+        // Chat voice-over engine (released with the overlay).
+        val chatContext = LocalContext.current
+        var chatTts: TextToSpeech? by remember { mutableStateOf(null) }
+
+        DisposableEffect(chatContext) {
+            var tts: TextToSpeech? = null
+            tts = TextToSpeech(chatContext) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    tts?.setLanguage(Locale.US)
+                    tts?.setSpeechRate(0.95f)
+                    tts?.setPitch(1.0f)
+                }
+            }
+            chatTts = tts
+            onDispose {
+                tts?.stop()
+                tts?.shutdown()
+                chatTts = null
+            }
+        }
+
         Column(modifier = Modifier.padding(16.dp)) {
             // Header
             Row(
@@ -83,6 +112,41 @@ fun AiChatOverlay(
                     fontSize = 18.sp
                 )
                 TextButton(onClick = onDismiss) { Text("Close") }
+            }
+
+            // Engine status micro-badge: Live Sync vs Offline Shield Active.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val (dot, label) = when (viewModel.engineStatus) {
+                    EngineStatus.ONLINE -> Color(0xFF2E7D32) to "Live Sync"
+                    EngineStatus.OFFLINE -> Color(0xFFE6B325) to "Offline Shield Active"
+                    else -> Color.Gray to "Connecting…"
+                }
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(dot, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    label,
+                    fontSize = 12.sp,
+                    color = Color.DarkGray,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+                if (viewModel.engineStatus == EngineStatus.OFFLINE) {
+                    TextButton(onClick = { viewModel.retryConnection() }) {
+                        Text(
+                            "↻ Retry",
+                            fontSize = 12.sp,
+                            color = Color(0xFFA75D5D),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
 
             // Chat Messages
@@ -104,7 +168,20 @@ fun AiChatOverlay(
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically()
                     ) {
-                        ChatBubble(message)
+                        ChatBubble(
+                            message = message,
+                            onSpeak = { text ->
+                                if (AppAudioGate.muted) {
+                                    AppAudioGate.muted = false
+                                    text.chunked(400).forEach { chunk ->
+                                        chatTts?.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
+                                    }
+                                } else {
+                                    chatTts?.stop()
+                                    AppAudioGate.muted = true
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -171,7 +248,11 @@ fun AiChatOverlay(
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage, modifier: Modifier = Modifier) {
+fun ChatBubble(
+    message: ChatMessage,
+    modifier: Modifier = Modifier,
+    onSpeak: ((String) -> Unit)? = null
+) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -183,11 +264,25 @@ fun ChatBubble(message: ChatMessage, modifier: Modifier = Modifier) {
             shape = RoundedCornerShape(12.dp),
             tonalElevation = 1.dp
         ) {
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(12.dp),
-                fontSize = 14.sp
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SelectionContainer(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = message.text,
+                        modifier = Modifier.padding(12.dp),
+                        fontSize = 14.sp
+                    )
+                }
+                if (onSpeak != null && !message.isUser) {
+                    IconButton(onClick = { onSpeak(message.text) }) {
+                        Icon(
+                            imageVector = if (AppAudioGate.muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                            contentDescription = if (AppAudioGate.muted) "Unmute all audio" else "Mute all audio",
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
