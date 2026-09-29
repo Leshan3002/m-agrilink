@@ -603,6 +603,15 @@ fun PremiumMarketAnalyzerScreen() {
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
             )
 
+            // Linked Weather Terminal screen (Top Navigation -> Weather Terminal).
+            if (activeViewport == "weather") {
+                WeatherTerminalScreen(
+                    county = selectedCounty.ifBlank { "Tana River" },
+                    onClose = { activeViewport = "home" }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
                 text = "Target County Corridor Hub",
