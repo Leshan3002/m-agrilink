@@ -8,6 +8,10 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import net.sqlcipher.database.SupportFactory
 
+/**
+ * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+ * Offline-first Room database. No payment gateway entities (informational build).
+ */
 @Database(
     entities = [CropAdvisory::class, HydrologicalAlert::class, ExpertForumPost::class, FarmerProfile::class, CropSearchHistory::class, TransporterProfile::class, TransportTask::class],
     version = 5,

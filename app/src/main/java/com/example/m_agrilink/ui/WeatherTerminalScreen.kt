@@ -65,6 +65,8 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.example.m_agrilink.OpenMeteoApiService
+import com.example.m_agrilink.OpenWeatherApiService
+import com.example.m_agrilink.BuildConfig
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import kotlinx.coroutines.Dispatchers
@@ -115,6 +117,13 @@ fun WeatherTerminalScreen(
             .build()
             .create(OpenMeteoApiService::class.java)
     }
+    val openWeather = remember {
+        Retrofit.Builder()
+            .baseUrl("https://api.openweathermap.org/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(OpenWeatherApiService::class.java)
+    }
 
     var hasFineLocation by remember {
         mutableStateOf(
@@ -141,6 +150,10 @@ fun WeatherTerminalScreen(
     var liveLoading by remember { mutableStateOf(false) }
     var liveError by remember { mutableStateOf<String?>(null) }
     var liveForecast by remember { mutableStateOf<List<ForecastDay>?>(null) }
+    var wxSource by remember { mutableStateOf("…") }
+    var wxDataTime by remember { mutableStateOf<String?>(null) }
+    var wxSunrise by remember { mutableStateOf<String?>(null) }
+    var wxSunset by remember { mutableStateOf<String?>(null) }
 
     fun resolvePrecisePlace(lat: Double, lon: Double) {
         if (resolvingPlace) return
@@ -181,41 +194,147 @@ fun WeatherTerminalScreen(
     fun fetchLiveWx(lat: Double, lon: Double) {
         scope.launch(Dispatchers.IO) {
             withContext(Dispatchers.Main) { liveLoading = true; liveError = null }
-            try {
-                val res = openMeteo.getLiveForecast(lat, lon)
-                val temps = res.hourly.temperature_2m
-                val rains = res.hourly.precipitation_probability
-                val hums = res.hourly.relativehumidity_2m
-                val nowT = res.current_weather?.temperature ?: temps.firstOrNull()
-                val nowW = res.current_weather?.windspeed
-                // WMO weathercode parsed off the main thread with the rest of
-                // the payload (M-AgriLink rain-guard, developer: Levis Lekesio).
-                val nowCode = res.current_weather?.weathercode
-                withContext(Dispatchers.Main) {
-                    if (nowT != null) liveTemp = nowT
-                    liveHumidity = hums.firstOrNull()
-                    if (nowW != null) liveWind = nowW
-                    liveWeatherCode = nowCode
-                    // Derive a 7-day strip from the hourly arrays (24h steps).
-                    try {
-                        val days = listOf("Today", "+1d", "+2d", "+3d", "+4d", "+5d", "+6d")
-                        liveForecast = days.mapIndexed { i, name ->
-                            val idx = (i * 24).coerceAtMost(maxOf(0, temps.size - 1))
-                            val maxT = temps.drop(idx).take(24).maxOrNull()?.toInt() ?: 27
-                            val minT = temps.drop(idx).take(24).minOrNull()?.toInt() ?: 18
-                            val rain = rains.getOrNull(idx) ?: 20
+            // 1) PRIMARY: OpenWeatherMap (user choice). Needs OPENWEATHER_API_KEY.
+            val owmKey = try { BuildConfig.OPENWEATHER_API_KEY.trim() } catch (e: Exception) { "" }
+            if (owmKey.isNotBlank()) {
+                try {
+                    val cur = openWeather.getCurrent(lat, lon, owmKey)
+                    val fc = try { openWeather.getForecast(lat, lon, owmKey) } catch (e: Exception) { null }
+                    val t = cur.main?.temp
+                    val h = cur.main?.humidity
+                    val wMs = cur.wind?.speed // m/s
+                    val wKmh = if (wMs != null) wMs * 3.6 else null
+                    // OpenWeather condition id 200-623 = rain/drizzle/snow.
+                    val owmId = cur.weather.firstOrNull()?.id
+                    val raining = owmId != null && owmId in 200..623
+                    // Group 3-hour slots into calendar days for honest max/min + max PoP.
+                    val days = try {
+                        val byDay = linkedMapOf<String, MutableList<com.example.m_agrilink.OwmItem>>()
+                        (fc?.list ?: emptyList()).forEach { it ->
+                            val key = (it.dt_txt?.take(10)) ?: "d${byDay.size}"
+                            byDay.getOrPut(key) { mutableListOf() }.add(it)
+                        }
+                        val fmtDay = java.text.SimpleDateFormat("EEE", Locale.getDefault())
+                        byDay.entries.take(7).mapIndexed { i, (_, items) ->
+                            val maxT = items.mapNotNull { it.main?.temp_max ?: it.main?.temp }.maxOrNull()?.toInt() ?: 27
+                            val minT = items.mapNotNull { it.main?.temp_min ?: it.main?.temp }.minOrNull()?.toInt() ?: 18
+                            val rain = items.mapNotNull { it.pop }.maxOrNull()?.times(100)?.toInt() ?: 10
+                            val label = if (i == 0) "Today" else fmtDay.format(Date((items.firstOrNull()?.dt ?: 0L) * 1000L))
                             val kind = when {
                                 rain >= 40 -> "rain"
                                 maxT >= 28 -> "sun"
                                 else -> "cloud"
                             }
-                            ForecastDay(name, kind, maxT, minT, rain)
+                            ForecastDay(label, kind, maxT, minT, rain)
+                        }.takeIf { it.isNotEmpty() }
+                    } catch (e: Exception) { null }
+                    val sunriseStr = cur.sys?.sunrise?.let {
+                        java.text.SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(it * 1000L))
+                    }
+                    val sunsetStr = cur.sys?.sunset?.let {
+                        java.text.SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date(it * 1000L))
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (t != null) liveTemp = t
+                        liveHumidity = h
+                        if (wKmh != null) liveWind = wKmh
+                        // Map OWM rain -> WMO-ish rain bucket so rain-guard badge still works.
+                        liveWeatherCode = if (raining) 61 else 0
+                        if (days != null) liveForecast = days
+                        wxSource = "OpenWeatherMap live"
+                        wxDataTime = cur.dt.takeIf { it > 0 }?.let {
+                            java.text.SimpleDateFormat("HH:mm z", Locale.getDefault()).format(Date(it * 1000L))
+                        }
+                        if (sunriseStr != null) wxSunrise = sunriseStr
+                        if (sunsetStr != null) wxSunset = sunsetStr
+                        liveLoading = false
+                    }
+                    return@launch
+                } catch (e: Exception) {
+                    // fall through to Open-Meteo fallback below
+                }
+            }
+            // 2) FALLBACK: Open-Meteo (keyless). Time-aligned, never .firstOrNull().
+            try {
+                val res = openMeteo.getLiveForecast(lat, lon)
+                val times = res.hourly.time
+                val temps = res.hourly.temperature_2m
+                val rains = res.hourly.precipitation_probability
+                val hums = res.hourly.relativehumidity_2m
+                // Find hourly index closest to NOW (Africa/Nairobi), not index 0.
+                fun nowIndex(): Int {
+                    if (times.isEmpty()) return 0
+                    return try {
+                        val tz = java.util.TimeZone.getTimeZone("Africa/Nairobi")
+                        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US)
+                        fmt.timeZone = tz
+                        val nowStr = fmt.format(Date()).substring(0, 13) // yyyy-MM-dd'T'HH
+                        val idx = times.indexOfFirst { it.take(13) == nowStr }
+                        if (idx >= 0) idx else 0
+                    } catch (e: Exception) { 0 }
+                }
+                val nowIdx = nowIndex().coerceIn(0, maxOf(0, temps.size - 1))
+                val nowT = res.current?.temperature_2m
+                    ?: res.current_weather?.temperature
+                    ?: temps.getOrNull(nowIdx)
+                val nowH = res.current?.relative_humidity_2m ?: hums.getOrNull(nowIdx)
+                val nowW = res.current?.wind_speed_10m ?: res.current_weather?.windspeed
+                // WMO weathercode parsed off the main thread with the rest of
+                // the payload (M-AgriLink rain-guard, developer: Levis Lekesio).
+                val nowCode = res.current?.weather_code ?: res.current_weather?.weathercode
+                withContext(Dispatchers.Main) {
+                    if (nowT != null) liveTemp = nowT
+                    liveHumidity = nowH
+                    if (nowW != null) liveWind = nowW
+                    liveWeatherCode = nowCode
+                    // Prefer daily aggregates when present — honest max/min + max PoP.
+                    try {
+                        val daily = res.daily
+                        liveForecast = if (daily != null && daily.time.size >= 7) {
+                            val inFmt = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val outFmt = java.text.SimpleDateFormat("EEE", Locale.getDefault())
+                            daily.time.take(7).mapIndexed { i, d ->
+                                val maxT = daily.temperature_2m_max.getOrNull(i)?.toInt() ?: 27
+                                val minT = daily.temperature_2m_min.getOrNull(i)?.toInt() ?: 18
+                                val rain = daily.precipitation_probability_max.getOrNull(i) ?: 20
+                                val code = daily.weathercode.getOrNull(i) ?: -1
+                                val label = if (i == 0) "Today" else try { outFmt.format(inFmt.parse(d)!!) } catch (e: Exception) { "+${i}d" }
+                                val kind = when {
+                                    code in setOf(51, 53, 55, 61, 63, 65, 80, 81, 82) || rain >= 40 -> "rain"
+                                    maxT >= 28 -> "sun"
+                                    else -> "cloud"
+                                }
+                                ForecastDay(label, kind, maxT, minT, rain)
+                            }
+                        } else {
+                            // Hourly-derived fallback: slice from NOW, 24h per day, max PoP.
+                            (0 until 7).map { d ->
+                                val start = (nowIdx + d * 24).coerceAtMost(maxOf(0, temps.size - 1))
+                                val tSlice = temps.drop(start).take(24)
+                                val rSlice = rains.drop(start).take(24)
+                                val maxT = tSlice.maxOrNull()?.toInt() ?: 27
+                                val minT = tSlice.minOrNull()?.toInt() ?: 18
+                                val rain = rSlice.maxOrNull() ?: 20
+                                val label = if (d == 0) "Today" else "+${d}d"
+                                val kind = when {
+                                    rain >= 40 -> "rain"
+                                    maxT >= 28 -> "sun"
+                                    else -> "cloud"
+                                }
+                                ForecastDay(label, kind, maxT, minT, rain)
+                            }
                         }
                     } catch (e: Exception) { liveForecast = null }
+                    wxSource = "Open-Meteo fallback"
+                    wxDataTime = res.current?.time ?: res.current_weather?.time ?: times.getOrNull(nowIdx)
+                    if (res.daily?.sunrise?.isNotEmpty() == true) {
+                        wxSunrise = res.daily.sunrise.firstOrNull()?.takeLast(5)
+                        wxSunset = res.daily.sunset.firstOrNull()?.takeLast(5)
+                    }
                     liveLoading = false
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) { liveLoading = false; liveError = "Live sync failed — showing last known pattern." }
+                withContext(Dispatchers.Main) { liveLoading = false; liveError = "Live sync failed — showing offline pattern." }
             }
         }
     }
@@ -373,18 +492,9 @@ fun WeatherTerminalScreen(
         label = "wxSunScale"
     )
 
-    val fallbackForecast = remember {
-        listOf(
-            ForecastDay("Monday", "sun", 28, 19, 10),
-            ForecastDay("Tuesday", "rain", 26, 19, 40),
-            ForecastDay("Wednesday", "cloud", 27, 18, 25),
-            ForecastDay("Thursday", "sun", 29, 20, 5),
-            ForecastDay("Friday", "sun", 28, 19, 15),
-            ForecastDay("Saturday", "rain", 25, 18, 55),
-            ForecastDay("Sunday", "cloud", 27, 19, 20)
-        )
-    }
-    val forecast = liveForecast ?: fallbackForecast
+    // No fake numbers: when live is null we show — instead of 24.5°C/65%.
+    val forecast = liveForecast ?: emptyList()
+    val hasLive = liveForecast != null && liveTemp != null
     var selectedDay by remember { mutableStateOf<ForecastDay?>(null) }
     // Effective place: AUTO-detected GPS first, Home county only as fallback.
     val effectivePlace = precisePlace ?: detectedCounty ?: county.ifBlank { "Tana River" }
@@ -438,7 +548,9 @@ fun WeatherTerminalScreen(
                         effectivePlace +
                         (if (resolvingPlace || locatingNow || liveLoading) " • locating…" else "") +
                         (if (latLon != null) " • $latLon" else "") +
-                        (if (liveForecast != null) " • live" else ""),
+                        " • $wxSource" +
+                        (if (wxDataTime != null) " • $wxDataTime" else "") +
+                        (if (liveError != null) " • OFFLINE" else ""),
                     color = Color(0xFFDCE6F5),
                     fontSize = 12.sp
                 )
@@ -474,11 +586,11 @@ fun WeatherTerminalScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            if (liveTemp != null) String.format(Locale.US, "%.1f°C", liveTemp) else "24.5°C",
+                            if (liveTemp != null) String.format(Locale.US, "%.1f°C", liveTemp) else "— offline —",
                             color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            "Humidity ${liveHumidity?.let { "$it%" } ?: "65%"} • Wind ${liveWind?.let { String.format(Locale.US, "%.0f km/h", it) } ?: "12 km/h"}" +
+                            "Humidity ${liveHumidity?.let { "$it%" } ?: "—"} • Wind ${liveWind?.let { String.format(Locale.US, "%.0f km/h", it) } ?: "—"}" +
                                 (if (liveError != null) " • offline pattern" else ""),
                             color = Color(0xFFDCE6F5), fontSize = 12.sp
                         )
@@ -555,7 +667,7 @@ fun WeatherTerminalScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.Start) {
                         Text("🌅 Sunrise", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                        Text("06:18 AM Local Time", fontSize = 14.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text(wxSunrise ?: "— live only —", fontSize = 14.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                     Icon(
                         imageVector = Icons.Filled.WbSunny,
@@ -565,7 +677,7 @@ fun WeatherTerminalScreen(
                     )
                     Column(horizontalAlignment = Alignment.End) {
                         Text("🌇 Sunset", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                        Text("06:27 PM Local Time", fontSize = 14.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                        Text(wxSunset ?: "— live only —", fontSize = 14.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))
@@ -589,12 +701,19 @@ fun WeatherTerminalScreen(
 
         // 4. 7-day extended forecast bar index.
         Text(
-            "📅 7-Day Extended Forecast",
+            "📅 7-Day Extended Forecast • $wxSource",
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             color = if (isDarkTheme) Color.White else Color.Black,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
+        if (!hasLive) {
+            Text(
+                if (liveLoading || locatingNow) "Syncing live forecast…" else "No live data yet — check GPS + internet, then tap Re-detect.",
+                fontSize = 12.sp, color = Color.Gray,
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -675,8 +794,8 @@ fun WeatherTerminalScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("☔ Rain probability: ${day.rainPct}%", fontSize = 13.sp, color = Color(0xFF1E3A8A))
-                        Text("💧 Humidity: ${liveHumidity?.let { "$it%" } ?: "65%"} • 💨 Wind: ${liveWind?.let { String.format(Locale.US, "%.0f km/h", it) } ?: "12 km/h"}", fontSize = 13.sp, color = Color.DarkGray)
-                        Text("🌅 Sunrise 06:18 AM • 🌇 Sunset 06:27 PM", fontSize = 13.sp, color = Color.DarkGray)
+                        Text("💧 Humidity: ${liveHumidity?.let { "$it%" } ?: "—"} • 💨 Wind: ${liveWind?.let { String.format(Locale.US, "%.0f km/h", it) } ?: "—"}", fontSize = 13.sp, color = Color.DarkGray)
+                        Text("🌅 Sunrise ${wxSunrise ?: "—"} • 🌇 Sunset ${wxSunset ?: "—"}", fontSize = 13.sp, color = Color.DarkGray)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(dayAdvisory(day, effectivePlace), fontSize = 13.sp, lineHeight = 19.sp, color = Color.Black)
                     }
