@@ -65,7 +65,11 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import com.example.m_agrilink.data.MarketDataRepository
+import com.example.m_agrilink.data.AgronomicAdvisory
+import com.example.m_agrilink.data.AppLocale
 import com.example.m_agrilink.data.CropNameNormalizer
+import com.example.m_agrilink.data.FrameQuality
+import com.example.m_agrilink.data.FrameRejectReason
 import com.example.m_agrilink.data.TfliteLeafAnalyzer
 import com.example.m_agrilink.ui.components.HiveJournalComponent
 import com.example.m_agrilink.data.local.AgriLinkDatabase
@@ -94,8 +98,44 @@ private const val VERIFIED_SOURCES_FOOTNOTE =
 
 class ImageProcessingException(message: String) : Exception(message)
 
+/** Keyed advisory display: Kiswahili when selected, original English otherwise. */
+private fun advisoryField(a: AgronomicAdvisory, field: String): String {
+    if (field == "moist") return if (AppLocale.isSwahili) tr("adv_moisture") else a.moistureCeiling
+    if (!AppLocale.isSwahili) return when (field) {
+        "space" -> a.plantingSpacing
+        "harvest" -> a.harvestNote
+        else -> a.landPrep
+    }
+    if (a.key in setOf("maize", "beans", "onions", "sorghum")) return tr("adv_${a.key}_$field")
+    if (a.key.isNotBlank()) return trf("adv_custom_$field", a.key)
+    return when (field) {
+        "space" -> a.plantingSpacing
+        "harvest" -> a.harvestNote
+        else -> a.landPrep
+    }
+}
+
 /** Dynamic crop diagnostic lookup: no hardcoded maize fallback. */
 private fun cropScanKey(raw: String): String = raw.trim().lowercase()
+
+/** Lens-state guards in both languages (reset prompt is translated). */
+private fun isPointLensText(s: String) =
+    s.startsWith("Point the lens") || s.startsWith("Elekeza lenzi")
+
+private fun isInvalidLensText(s: String) =
+    s.startsWith("Invalid") || s.startsWith("Uncertain")
+
+/** User-facing quality guidance in the active language (gate internals stay English). */
+private fun qualityGuidance(quality: FrameQuality, confidencePct: Int = 0): String {
+    return when (quality.reason) {
+        FrameRejectReason.TOO_DARK -> tr("qual_dark")
+        FrameRejectReason.TOO_BRIGHT -> tr("qual_bright")
+        FrameRejectReason.BLURRY -> tr("qual_blurry")
+        FrameRejectReason.NO_LEAF -> tr("qual_noleaf")
+        FrameRejectReason.LOW_CONFIDENCE -> trf("qual_lowconf", confidencePct)
+        else -> tr("qual_crash")
+    }
+}
 
 private fun cropDiagnosticTitle(
     plantedCrop: String,
@@ -105,36 +145,26 @@ private fun cropDiagnosticTitle(
 ): String {
     if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
         val name = plantedCrop.trim().ifBlank { "Crop" }
-        return "✅ DIAGNOSIS: $name looks healthy ($confidencePct% confidence via $source)."
+        return trf("diag_healthy_title", name, confidencePct, source)
     }
     return when (cropScanKey(plantedCrop)) {
-        "mango" -> "🎯 DIAGNOSIS: Mango Fruit Fly (Bactrocera dorsalis) damage detected on skin surfaces."
-        "beans", "bean" -> "🎯 DIAGNOSIS: Bean Fly (Ophiomyia phaseoli) stem tunneling or Black Bean Aphid clustering detected."
-        "maize" -> "🎯 DIAGNOSIS: $liveDiagnosis detected ($confidencePct% confidence via $source) — Fall Armyworm (Spodoptera frugiperda) protocol."
+        "mango" -> tr("diag_mango")
+        "beans", "bean" -> tr("diag_beans")
+        "maize" -> trf("diag_maize", liveDiagnosis, confidencePct, source)
         else -> {
             val label = plantedCrop.trim().ifBlank { liveDiagnosis }
-            if (label.isBlank()) "🎯 DIAGNOSIS: General foliar anomaly detected."
-            else "🎯 DIAGNOSIS: General Foliar/Leaf spot anomaly detected for ${label.uppercase()}"
+            if (label.isBlank()) tr("diag_general")
+            else trf("diag_general_crop", label.uppercase())
         }
     }
 }
 
 private fun cropDiagnosticBody(plantedCrop: String): List<String> {
     return when (cropScanKey(plantedCrop)) {
-        "mango" -> listOf(
-            "🌿 MANAGEMENT ADVISORY: Do not apply heavy chemical sprays near harvesting. Hang localized methyl eugenol pheromone traps at canopy level (10 traps per acre) to trap male flies. Collect and bury all fallen fruits at least 2 feet deep or seal them inside black plastic bags under the sun for few days to completely suffocate larvae and break the pest's lifecycle."
-        )
-        "beans", "bean" -> listOf(
-            "🌿 MANAGEMENT ADVISORY: Earth up soil around the plant stems during weeding to encourage adventitious root growth. For severe aphid attacks, spray natural neem seed kernel extracts or potassium-soap solutions early in the morning before bees become active."
-        )
-        "maize" -> listOf(
-            "🌿 PUSH-PULL BIOLOGICAL STRATEGY (icipe Kenya): Intercrop your maize rows cleanly with Desmodium (repels the moths away via chemical volatilization) and plant Napier Grass or Brachiaria along your field perimeters as an attractive trap crop. This method cuts pest pressure by over 70% naturally.",
-            "🐛 SCOUTING & CULTURAL REMEDIES (CABI Plantwise): Perform structural field scouting twice a week. Handpick and destroy visible egg masses or caterpillars immediately. Crushing caterpillars against leaf whorls prevents secondary lifecycle generations.",
-            "🧪 TIMED CHEMICAL EMERGENCY ACTION (CIMMYT & FAO): If leaf damage indices surpass a 20% infestation threshold across young stalks, apply targeted bio-rationals or registered chemical options such as Spinetoram or Spinosad directly down into the whorls. Alternate chemical classes to completely halt pest resistance build-up."
-        )
-        else -> listOf(
-            "🌿 MANAGEMENT ADVISORY: Maintain proper plant row spacing to improve air circulation and reduce leaf wetness. Prune infected lower leaves immediately. Avoid overhead irrigation during cold evenings to limit fungal spore tracking across your plot."
-        )
+        "mango" -> listOf(tr("body_mango"))
+        "beans", "bean" -> listOf(tr("body_beans"))
+        "maize" -> listOf(tr("body_maize_1"), tr("body_maize_2"), tr("body_maize_3"))
+        else -> listOf(tr("body_general"))
     }
 }
 
@@ -146,7 +176,7 @@ private fun cropFullAdvisoryText(
 ): String {
     val title = cropDiagnosticTitle(plantedCrop, liveDiagnosis, confidencePct, source)
     val body = if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
-        listOf("🌿 PREVENTIVE CARE: Keep scouting twice weekly, clear weeds and debris around the base, mulch to hold moisture, and watch leaf edges after humid nights. Retake the scan if spots, holes, or yellowing appear.")
+        listOf(tr("body_preventive"))
     } else {
         cropDiagnosticBody(plantedCrop)
     }
@@ -158,8 +188,8 @@ private fun overviewCropName(plantedCrop: String, liveDiagnosis: String): String
     val typed = plantedCrop.trim()
     if (typed.isNotBlank()) return typed
     val lens = liveDiagnosis.trim()
-    if (lens.isNotBlank() && !lens.startsWith("Point the lens") && !lens.startsWith("Invalid") && !lens.startsWith("Uncertain")) return lens
-    return "your crop"
+    if (lens.isNotBlank() && !isPointLensText(lens) && !isInvalidLensText(lens)) return lens
+    return tr("lens_your_crop")
 }
 
 private fun overviewPestName(plantedCrop: String, liveDiagnosis: String): String {
@@ -167,20 +197,21 @@ private fun overviewPestName(plantedCrop: String, liveDiagnosis: String): String
     return when (cropScanKey(plantedCrop)) {
         "mango" -> "Mango Fruit Fly (Bactrocera dorsalis)"
         "beans", "bean" -> "Bean Fly (Ophiomyia phaseoli) / Black Bean Aphid"
-        "maize" -> if (liveDiagnosis.isNotBlank() && !liveDiagnosis.startsWith("Point the lens")) liveDiagnosis else "Fall Armyworm (Spodoptera frugiperda)"
-        else -> if (liveDiagnosis.isNotBlank() && !liveDiagnosis.startsWith("Point the lens") && !liveDiagnosis.startsWith("Invalid") && !liveDiagnosis.startsWith("Uncertain")) liveDiagnosis else "foliar pest"
+        "maize" -> if (liveDiagnosis.isNotBlank() && !isPointLensText(liveDiagnosis)) liveDiagnosis else "Fall Armyworm (Spodoptera frugiperda)"
+        else -> if (liveDiagnosis.isNotBlank() && !isPointLensText(liveDiagnosis) && !isInvalidLensText(liveDiagnosis)) liveDiagnosis else tr("lens_foliar")
     }
 }
 
 private fun overviewControlBullets(): List<Pair<String, String>> = listOf(
-    "Physical Removal:" to "Clear the pest manually with a strong jet of water and handpick visible egg masses twice weekly.",
-    "Pruning & Sanitation:" to "Safely remove and destroy overrun plant tissue by pruning infected leaves and burning them to break the lifecycle.",
-    "Organic Sprays:" to "Apply neem-based or bio-rational morning spraying protocols, coating branches with neem oil or insecticidal soap in cool hours.",
-    "Biological Control:" to "Use predator cards and habitat management — conserve natural enemies, keep Desmodium intercrop and trap borders to suppress pressure."
+    tr("cb_lead_1") to tr("cb_rest_1"),
+    tr("cb_lead_2") to tr("cb_rest_2"),
+    tr("cb_lead_3") to tr("cb_rest_3"),
+    tr("cb_lead_4") to tr("cb_rest_4")
 )
 
-private const val OVERVIEW_CTA =
-    "💡 Let's optimize: Are you growing these crops in a small home garden plot or a large-scale commercial orchard? Let Shamba Al know so we can suggest tailored systemic organic treatment blends matching your growing scale!"
+private fun overviewCta(): String = tr("overview_cta")
+
+private fun verifiedSourcesFootnote(): String = tr("overview_sources")
 
 /** Segmented TTS: reads the structured overview section by section with short pauses. */
 private fun speakOverviewSegments(
@@ -258,7 +289,7 @@ private fun ScanOverviewCard(
     val isHealthy = liveDiagnosis.contains("Healthy", ignoreCase = true)
     val scanTitle = cropDiagnosticTitle(plantedCrop, liveDiagnosis, confidencePct, source)
     val scanBody: List<String> = if (isHealthy) {
-        listOf("🌿 PREVENTIVE CARE: Keep scouting twice weekly, clear weeds and debris around the base, mulch to hold moisture, and watch leaf edges after humid nights. Retake the scan if spots, holes, or yellowing appear.")
+        listOf(tr("body_preventive"))
     } else {
         cropDiagnosticBody(plantedCrop)
     }
@@ -288,7 +319,7 @@ private fun ScanOverviewCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "🩺 PEST IDENTIFICATION",
+                    text = str("scan_ident"),
                     color = headerGold,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.ExtraBold,
@@ -311,15 +342,15 @@ private fun ScanOverviewCard(
                 ) {
                     Icon(
                         imageVector = if (AppAudioGate.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                        contentDescription = "Read scan result aloud",
+                        contentDescription = str("read_aloud"),
                         tint = headerGold
                     )
                 }
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = if (isHealthy) "Your $cropName looks healthy ($confidencePct% confidence via $source)."
-                else "Your crop is facing an active infestation of $pestName on $cropName ($confidencePct% confidence via $source).",
+                text = if (isHealthy) strf("scan_ident_healthy", cropName, confidencePct, source)
+                else strf("scan_ident_hit", pestName, cropName, confidencePct, source),
                 color = Color.White,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
@@ -335,7 +366,7 @@ private fun ScanOverviewCard(
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "🛠️ IMMEDIATE CONTROL & MANAGEMENT",
+                text = str("scan_control"),
                 color = headerGold,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -367,7 +398,7 @@ private fun ScanOverviewCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "🌿 CROP-SPECIFIC PROTOCOL",
+                text = str("scan_protocol"),
                 color = headerGold,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -394,7 +425,7 @@ private fun ScanOverviewCard(
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "✅ VALIDATED CONTROL (KALRO • CABI • icipe • FAO)",
+                text = str("scan_validated"),
                 color = headerGold,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -428,7 +459,7 @@ private fun ScanOverviewCard(
                     .padding(12.dp)
             ) {
                 Text(
-                    text = OVERVIEW_CTA,
+                    text = overviewCta(),
                     color = Color(0xFF2C2C2E),
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
@@ -437,7 +468,7 @@ private fun ScanOverviewCard(
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = VERIFIED_SOURCES_FOOTNOTE,
+                text = verifiedSourcesFootnote(),
                 color = mutedText,
                 fontSize = 11.sp,
                 lineHeight = 16.sp,
@@ -472,7 +503,8 @@ private fun ScanOverviewCard(
 private fun HoneyOverviewCard(
     modifier: Modifier = Modifier
 ) {
-    val honey = remember { MarketDataRepository.getHoneyProfile() }
+    val honeyLang = AppLocale.language
+    val honey = remember(honeyLang) { MarketDataRepository.getHoneyProfile() }
     val cardBg = Color(0xFF1C1C1E)
     val bodyText = Color(0xFFF5F5F5)
     val mutedText = Color(0xFFB9B9C0)
@@ -485,7 +517,7 @@ private fun HoneyOverviewCard(
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text(
-                text = "🍯 LIVE MARKET FEED • KAMIS",
+                text = str("honey_live"),
                 color = headerGold,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -501,7 +533,7 @@ private fun HoneyOverviewCard(
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Base Market Index Average: ${honey.baseIndexAverage}",
+                text = strf("honey_base", honey.baseIndexAverage),
                 color = bodyText,
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
@@ -509,7 +541,7 @@ private fun HoneyOverviewCard(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Trajectory Vector: ${honey.trajectoryVector}",
+                text = strf("honey_traj", honey.trajectoryVector),
                 color = bodyText,
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
@@ -517,7 +549,7 @@ private fun HoneyOverviewCard(
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "📍 LOCALIZED MARKET DEVIATIONS",
+                text = str("honey_deviations"),
                 color = headerGold,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -571,7 +603,8 @@ private fun LogisticsTrackerComponent(
     onContactDriver: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val snapshot = remember(selectedCounty) { MarketDataRepository.getLorrySnapshot(selectedCounty) }
+    val snapshotLang = AppLocale.language
+    val snapshot = remember(selectedCounty, snapshotLang) { MarketDataRepository.getLorrySnapshot(selectedCounty) }
     val transporters = remember(selectedCounty) { MarketDataRepository.getTransporters(selectedCounty) }
     val firstPhone = transporters.firstOrNull()?.phone ?: "0722000000"
     Card(
@@ -581,15 +614,15 @@ private fun LogisticsTrackerComponent(
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Text(
-                text = "🚚 Regional Transport & Lorry Logistics",
+                text = str("logi_title"),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFE6B325)
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = if (selectedCounty.isBlank()) "Select a corridor hub above for tonight's departures."
-                else "Live corridor: ${snapshot.regionLabel} ➔ ${snapshot.hubDestination}",
+                text = if (selectedCounty.isBlank()) str("logi_nocounty")
+                else strf("logi_route", snapshot.regionLabel, snapshot.hubDestination),
                 color = Color.LightGray,
                 fontSize = 13.sp
             )
@@ -613,7 +646,7 @@ private fun LogisticsTrackerComponent(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
             ) {
-                Text("📞 Tap to contact driver", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(str("logi_contact"), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -637,7 +670,8 @@ private fun formatKes(amount: Int): String =
 private fun SaccoInputPlannerWidget(
     modifier: Modifier = Modifier
 ) {
-    val catalog = remember { MarketDataRepository.getSaccoCatalog() }
+    val saccoLang = AppLocale.language
+    val catalog = remember(saccoLang) { MarketDataRepository.getSaccoCatalog() }
     var acreageInput by rememberSaveable { mutableStateOf("1.0") }
     val acreage = acreageInput.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
     val projection = remember(catalog, acreage) { catalog.projection(acreage) }
@@ -648,14 +682,14 @@ private fun SaccoInputPlannerWidget(
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Text(
-                text = "💰 SACCO Certified Input Planner",
+                text = str("sac_title"),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2C2C2E)
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Certified wholesale trends — budget before planting, avoid price gouging.",
+                text = str("sac_sub"),
                 color = Color.DarkGray,
                 fontSize = 13.sp
             )
@@ -708,25 +742,25 @@ private fun SaccoInputPlannerWidget(
                 value = acreageInput,
                 onValueChange = { acreageInput = it.filter { c -> c.isDigit() || c == '.' } },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Estimated acreage", color = Color.Gray) },
-                placeholder = { Text("e.g. 2.5", color = Color.Gray) },
+                label = { Text(str("sac_acre"), color = Color.Gray) },
+                placeholder = { Text(str("sac_acre_hint"), color = Color.Gray) },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Baseline projection for ${if (acreageInput.isBlank()) "0" else acreageInput} acre(s):",
+                text = strf("sac_proj_for", if (acreageInput.isBlank()) "0" else acreageInput),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2C2C2E)
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text("🌱 Seed (${projection.seedPackets} pkts): ${formatKes(projection.seedCostKes)}", fontSize = 13.sp, color = Color.DarkGray)
-            Text("🧪 DAP (${projection.dapBags} bags): ${formatKes(projection.dapCostKes)}", fontSize = 13.sp, color = Color.DarkGray)
-            Text("🌿 Compost (${projection.compostBags} bags): ${formatKes(projection.compostCostKes)}", fontSize = 13.sp, color = Color.DarkGray)
+            Text(strf("sac_seed", projection.seedPackets, formatKes(projection.seedCostKes)), fontSize = 13.sp, color = Color.DarkGray)
+            Text(strf("sac_dap", projection.dapBags, formatKes(projection.dapCostKes)), fontSize = 13.sp, color = Color.DarkGray)
+            Text(strf("sac_compost", projection.compostBags, formatKes(projection.compostCostKes)), fontSize = 13.sp, color = Color.DarkGray)
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Total investment: ${formatKes(projection.totalKes)}",
+                text = strf("sac_total", formatKes(projection.totalKes)),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color(0xFF1B5E20)
@@ -804,7 +838,7 @@ private fun MarketOverviewPage(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1E))
         ) {
-            Text("← Back to Home Dashboard", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(str("back_home"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
         Spacer(modifier = Modifier.height(12.dp))
         // KAMIS-style hero header.
@@ -821,15 +855,15 @@ private fun MarketOverviewPage(
         ) {
             Column {
                 Text(
-                    "📊 M-AgriLink Market Terminal",
+                    str("mkt_hero"),
                     color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    (if (selectedCounty.isBlank()) "All Kenya • pick a county" else "$selectedCounty County") +
-                        " • Updated 2h ago • Retail + Wholesale",
+                    (if (selectedCounty.isBlank()) str("mkt_hero_all") else strf("mkt_hero_county", selectedCounty)) +
+                        str("mkt_hero_tail"),
                     color = Color(0xFFDCE6F5),
                     fontSize = 12.sp
                 )
@@ -845,7 +879,7 @@ private fun MarketOverviewPage(
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "📍 County hub",
+            text = str("mkt_county_hub"),
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = contentPrimary,
@@ -875,7 +909,7 @@ private fun MarketOverviewPage(
         }
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "🌱 My Crops — enter any crop of your choice",
+            text = str("mkt_mycrops"),
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = contentPrimary,
@@ -890,7 +924,7 @@ private fun MarketOverviewPage(
                 value = newMarketCropInput,
                 onValueChange = { newMarketCropInput = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("e.g. Mango, Avocado, Coffee…", color = Color.Gray) },
+                placeholder = { Text(str("mkt_crop_hint"), color = Color.Gray) },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -911,7 +945,7 @@ private fun MarketOverviewPage(
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
             ) {
-                Text("Add", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(str("mkt_add"), color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
         if (myCrops.isNotEmpty()) {
@@ -929,7 +963,7 @@ private fun MarketOverviewPage(
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                "Tap a saved crop for its full KAMIS trend & analysis below.",
+                str("mkt_tap_saved"),
                 fontSize = 11.sp,
                 color = canvasMuted,
                 modifier = Modifier.padding(start = 4.dp)
@@ -937,7 +971,7 @@ private fun MarketOverviewPage(
         }
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "🌾 Crop filter",
+            text = str("mkt_filter"),
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = contentPrimary,
@@ -957,7 +991,7 @@ private fun MarketOverviewPage(
                     )
                 ) {
                     Text(
-                        name,
+                        if (name == "All") str("mkt_all") else name,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (selected) Color.White else cardText
@@ -982,7 +1016,7 @@ private fun MarketOverviewPage(
                     )
                 ) {
                     Text(
-                        mode,
+                        if (mode == "Wholesale") str("price_wholesale") else str("price_retail"),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (selected) Color.Black else cardText
@@ -993,7 +1027,7 @@ private fun MarketOverviewPage(
         if (watchlist.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "⭐ Watching: " + watchlist.sorted().joinToString(" • "),
+                strf("mkt_watching", watchlist.sorted().joinToString(" • ")),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = contentPrimary,
@@ -1012,7 +1046,7 @@ private fun MarketOverviewPage(
                 colors = CardDefaults.cardColors(containerColor = cardBg)
             ) {
                 Text(
-                    text = "Pick a county hub above (or on Home) to rank Maize, Beans, Onions and Sorghum by live corridor margin, trends, and per-market boards.",
+                    text = str("mkt_empty"),
                     color = cardText,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
@@ -1031,7 +1065,7 @@ private fun MarketOverviewPage(
                             .padding(12.dp)
                     ) {
                         Text(
-                            text = "🔔 Price alert: ${best.cropName} margin is wide (+$marginPct%). Aggregate and transport this week before the corridor tightens.",
+                            text = strf("alert_margin", best.cropName, marginPct),
                             color = Color(0xFF1B5E20),
                             fontSize = 13.sp,
                             lineHeight = 19.sp,
@@ -1048,7 +1082,7 @@ private fun MarketOverviewPage(
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = "🏆 Best corridor deal: ${best.cropName} — Local KES ${best.localPriceKes} → Hub KES ${best.hubPriceKes} (net +KES ${best.netMarginKes}/bag). ${MarketDataRepository.marketVerdict(best)}.",
+                        text = strf("best_deal", best.cropName, best.localPriceKes, best.hubPriceKes, best.netMarginKes, MarketDataRepository.marketVerdict(best)),
                         color = Color(0xFF2C2C2E),
                         fontSize = 13.sp,
                         lineHeight = 19.sp,
@@ -1097,8 +1131,8 @@ private fun MarketOverviewPage(
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
-                                        text = if (isHoneyRow) "📈 +4.3% rising"
-                                        else "${if (crop.netMarginKes >= 0) "+" else ""}KES ${crop.netMarginKes} net",
+                                        text = if (isHoneyRow) str("badge_rising")
+                                        else strf("net_fmt", if (crop.netMarginKes >= 0) "+" else "", crop.netMarginKes),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isHoneyRow) Color(0xFF1B5E20)
@@ -1108,8 +1142,8 @@ private fun MarketOverviewPage(
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                if (isHoneyRow) "Local KES ${crop.localPriceKes} / Kg → Hub KES ${crop.hubPriceKes} / Kg (KAMIS honey index: base 970, wholesale 700)"
-                                else "Local KES ${crop.localPriceKes} → Hub KES ${crop.hubPriceKes} (gross +KES ${crop.grossMarginKes}, transit KES 350)",
+                                if (isHoneyRow) strf("honey_row", crop.localPriceKes, crop.hubPriceKes)
+                                else strf("row_local", crop.localPriceKes, crop.hubPriceKes, crop.grossMarginKes),
                                 fontSize = 12.sp,
                                 color = cardMuted
                             )
@@ -1123,7 +1157,7 @@ private fun MarketOverviewPage(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 if (isHoneyRow) MarketDataRepository.getHoneyProfile().sourceFootnote
-                                else "Source: M-AgriLink offline corridor matrix (KALRO baseline), 47-county pricing engine.",
+                                else str("row_source"),
                                 fontSize = 10.sp,
                                 color = Color.Gray
                             )
@@ -1140,14 +1174,14 @@ private fun MarketOverviewPage(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "📈 7-day wholesale trend — ${focusRecord.cropName} (${focusRecord.unit})" + if (hasCustom && focusCrop.equals(customRecord?.cropName, ignoreCase = true)) " 📡 KAMIS" else "",
+                            strf("trend_title", focusRecord.cropName, focusRecord.unit) + if (hasCustom && focusCrop.equals(customRecord?.cropName, ignoreCase = true)) " 📡 KAMIS" else "",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = cardText
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "Tap bars read left→right: weekly low to today's hub price.",
+                            str("trend_hint"),
                             fontSize = 11.sp,
                             color = cardMuted
                         )
@@ -1185,7 +1219,7 @@ private fun MarketOverviewPage(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            "Week range: KES ${history.minOf { it.priceKes }} → KES ${history.maxOf { it.priceKes }}.",
+                            strf("trend_range", history.minOf { it.priceKes }, history.maxOf { it.priceKes }),
                             fontSize = 11.sp,
                             color = cardMuted
                         )
@@ -1202,14 +1236,14 @@ private fun MarketOverviewPage(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            "🏪 Per-market board — $focusCrop ($priceType, ${focusRecord?.unit ?: "90kg Bag"})" + if (hasCustom && focusCrop.equals(customRecord?.cropName, ignoreCase = true)) " 📡 KAMIS" else "",
+                            strf("board_title", focusCrop, if (priceType == "Wholesale") str("price_wholesale") else str("price_retail"), focusRecord?.unit ?: "90kg Bag") + if (hasCustom && focusCrop.equals(customRecord?.cropName, ignoreCase = true)) " 📡 KAMIS" else "",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = cardText
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "Compare where to sell today; green = rising, red = falling.",
+                            str("board_hint"),
                             fontSize = 11.sp,
                             color = cardMuted
                         )
@@ -1262,7 +1296,7 @@ private fun MarketOverviewPage(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            "Source: M-AgriLink live board (KAMIS-inspired), simulated offline from corridor matrix.",
+                            str("board_source"),
                             fontSize = 10.sp,
                             color = Color.Gray
                         )
@@ -1310,6 +1344,8 @@ fun PremiumMarketAnalyzerScreen() {
     var usernameInput by rememberSaveable { mutableStateOf("") }
     var isDarkTheme by rememberSaveable { mutableStateOf(false) }
     var selectedLanguage by rememberSaveable { mutableStateOf("English") }
+    // Language picker drives every Dashboard string via AppLocale.
+    LaunchedEffect(selectedLanguage) { AppLocale.language = selectedLanguage }
     var activeViewport by rememberSaveable { mutableStateOf("home") }
     var navExpanded by remember { mutableStateOf(false) }
     var langExpanded by remember { mutableStateOf(false) }
@@ -1452,11 +1488,9 @@ fun PremiumMarketAnalyzerScreen() {
     }
     val cropKey = cropQuery.lowercase()
     val liveAdvisoryText = when {
-        cropKey == "maize" && activeHumidity >= 70 ->
-            "High humidity alert (72%) detected across Baringo. Field conditions increase the risk of Gray Leaf Spot fungal strains. Monitor crop leaves closely this week."
-        cropKey == "beans" && activeWindSpeed <= 10.0 ->
-            "Winds are calm at 5.2 km/h. Ideal morning window open to apply safe crop protections safely."
-        else -> "Temp ${activeTemperature}°C • Humidity ${activeHumidity}% • Wind ${activeWindSpeed} km/h — scout ${selectedCounty.ifBlank { "Baringo" }} fields early morning; keep foliage dry to curb fungal pressure."
+        cropKey == "maize" && activeHumidity >= 70 -> tr("adv_maize_humid")
+        cropKey == "beans" && activeWindSpeed <= 10.0 -> tr("adv_beans_calm")
+        else -> trf("adv_default", activeTemperature, activeHumidity, activeWindSpeed, selectedCounty.ifBlank { "Baringo" })
     }
 
     val counties = MarketDataRepository.getCounties()
@@ -1515,8 +1549,8 @@ fun PremiumMarketAnalyzerScreen() {
     ) { uri: Uri? ->
         if (uri == null) {
             scope.launch(Dispatchers.Main) {
-                scannerError = "⚠️ No image selected. Tap 🖼️ Upload Crop Image and pick a clear crop photo."
-                imageSourceLabel = "Gallery upload"
+                scannerError = tr("scan_no_image")
+                imageSourceLabel = tr("src_gallery")
                 isGalleryMode = false
                 isScanningForDisease = true
                 diseaseScanComplete = false
@@ -1540,8 +1574,8 @@ fun PremiumMarketAnalyzerScreen() {
                 }
                 if (bitmap == null) {
                     withContext(Dispatchers.Main) {
-                        scannerError = "⚠️ Scanner Alert: Could not read that image. Pick a clear crop leaf, fruit, or stem photo and try again."
-                        imageSourceLabel = "Gallery upload"
+                        scannerError = tr("scan_unreadable")
+                        imageSourceLabel = tr("src_gallery")
                         galleryBitmap = null
                         isGalleryMode = true
                         googleBrief = null
@@ -1582,7 +1616,7 @@ fun PremiumMarketAnalyzerScreen() {
                     liveDiagnosis = smart.diagnosis.label
                     liveConfidence = smart.diagnosis.confidence
                     liveSource = smart.diagnosis.source
-                    scannerError = if (smart.quality.usable) null else smart.quality.guidance
+                    scannerError = if (smart.quality.usable) null else qualityGuidance(smart.quality, (smart.diagnosis.confidence * 100).toInt())
                     googleBrief = null
                     googleSource = ""
                     googleLoading = false
@@ -1802,25 +1836,25 @@ fun PremiumMarketAnalyzerScreen() {
                     selected = activeViewport == "market" || activeViewport == "weather" || activeViewport == "account",
                     onClick = { navExpanded = true },
                     icon = { Text("🌐", fontSize = 20.sp) },
-                    label = { Text("Navigate", fontSize = 11.sp) }
+                    label = { Text(str("tab_navigate"), fontSize = 11.sp) }
                 )
                 NavigationBarItem(
                     selected = false,
                     onClick = { langExpanded = true },
                     icon = { Text("🔤", fontSize = 20.sp) },
-                    label = { Text("Language", fontSize = 11.sp) }
+                    label = { Text(str("tab_language"), fontSize = 11.sp) }
                 )
                 NavigationBarItem(
                     selected = false,
                     onClick = { settingsExpanded = true },
                     icon = { Text("⚙️", fontSize = 20.sp) },
-                    label = { Text("Settings", fontSize = 11.sp) }
+                    label = { Text(str("tab_settings"), fontSize = 11.sp) }
                 )
                 NavigationBarItem(
                     selected = activeViewport == "articles",
                     onClick = { activeViewport = "articles" },
                     icon = { Text("📰", fontSize = 20.sp) },
-                    label = { Text("Articles", fontSize = 11.sp) }
+                    label = { Text(str("tab_articles"), fontSize = 11.sp) }
                 )
             }
         }
@@ -1890,14 +1924,14 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "National Market Analyzer",
+                    text = str("banner_title"),
                     fontSize = 22.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Optimize your agricultural corridor trade margins live.",
+                    text = str("banner_sub"),
                     fontSize = 12.sp,
                     color = Color(0xFFF2E6E6)
                 )
@@ -1909,10 +1943,10 @@ fun PremiumMarketAnalyzerScreen() {
         if (navExpanded) {
             AlertDialog(
                 onDismissRequest = { navExpanded = false },
-                title = { Text("🌐 Navigate", fontWeight = FontWeight.Bold) },
+                title = { Text(str("nav_title"), fontWeight = FontWeight.Bold) },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        @Composable fun navOption(label: String, target: String) {
+                        @Composable fun navOption(labelKey: String, target: String) {
                             TextButton(
                                 onClick = {
                                     activeViewport = target
@@ -1921,21 +1955,21 @@ fun PremiumMarketAnalyzerScreen() {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    (if (activeViewport == target) "✓ " else "") + label,
+                                    (if (activeViewport == target) "✓ " else "") + str(labelKey),
                                     fontSize = 14.sp,
                                     color = Color.Black,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
-                        navOption("🏠 Home Page Dashboard", "home")
-                        navOption("📊 Market Overview", "market")
-                        navOption("🌦 Weather Terminal", "weather")
-                        navOption("📰 AgriTech News & Articles", "articles")
-                        navOption("👨‍🌾 My Account", "account")
+                        navOption("nav_home", "home")
+                        navOption("nav_market", "market")
+                        navOption("nav_weather", "weather")
+                        navOption("nav_articles", "articles")
+                        navOption("nav_account", "account")
                     }
                 },
-                confirmButton = { TextButton(onClick = { navExpanded = false }) { Text("Close", color = Color.Gray) } },
+                confirmButton = { TextButton(onClick = { navExpanded = false }) { Text(str("dlg_close"), color = Color.Gray) } },
                 containerColor = Color.White,
                 shape = RoundedCornerShape(16.dp)
             )
@@ -1943,7 +1977,7 @@ fun PremiumMarketAnalyzerScreen() {
         if (langExpanded) {
             AlertDialog(
                 onDismissRequest = { langExpanded = false },
-                title = { Text("🔤 Language", fontWeight = FontWeight.Bold) },
+                title = { Text(str("lang_title"), fontWeight = FontWeight.Bold) },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         listOf("English", "Kiswahili", "Kikuyu", "Kaljin", "Luo").forEach { lang ->
@@ -1972,7 +2006,7 @@ fun PremiumMarketAnalyzerScreen() {
         if (settingsExpanded) {
             AlertDialog(
                 onDismissRequest = { settingsExpanded = false },
-                title = { Text("⚙️ System Settings", fontWeight = FontWeight.Bold) },
+                title = { Text(str("set_title"), fontWeight = FontWeight.Bold) },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         @Composable fun settingOption(label: String, onTap: () -> Unit) {
@@ -1980,19 +2014,19 @@ fun PremiumMarketAnalyzerScreen() {
                                 Text(label, fontSize = 14.sp, color = Color.Black, modifier = Modifier.fillMaxWidth())
                             }
                         }
-                        settingOption(if (isDarkTheme) "🌙 Dark Mode: On (tap to turn off)" else "☀️ Dark Mode: Off (tap to turn on)") {
+                        settingOption(if (isDarkTheme) str("set_dark_on") else str("set_dark_off")) {
                             isDarkTheme = !isDarkTheme
                         }
-                        settingOption("🧹 Clear Device Cache") {
+                        settingOption(str("set_clear")) {
                             liveBrief = null
                             briefSource = ""
                             cropHistory = listOf()
-                            cacheNotice = "Device cache cleared."
+                            cacheNotice = tr("note_cache_cleared")
                         }
-                        settingOption("♿ Accessibility Profiles") {
-                            cacheNotice = "Accessibility profiles: Standard / High-contrast / Large-text ready."
+                        settingOption(str("set_a11y")) {
+                            cacheNotice = tr("note_a11y")
                         }
-                        settingOption("🍪 Cookie Settings") {
+                        settingOption(str("set_cookies")) {
                             tmpAnalytics = consentState.analytics
                             tmpPersonalization = consentState.personalization
                             tmpMarketing = consentState.marketing
@@ -2005,7 +2039,7 @@ fun PremiumMarketAnalyzerScreen() {
                         }
                     }
                 },
-                confirmButton = { TextButton(onClick = { settingsExpanded = false }) { Text("Done", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold) } },
+                confirmButton = { TextButton(onClick = { settingsExpanded = false }) { Text(str("set_done"), color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold) } },
                 containerColor = Color.White,
                 shape = RoundedCornerShape(16.dp)
             )
@@ -2039,14 +2073,14 @@ fun PremiumMarketAnalyzerScreen() {
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text(
-                            text = "👨‍🌾 Farmer Account",
+                            text = str("acct_title"),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2C2C2E)
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Create an account to personalize advisories ($selectedLanguage). Edit your profile anytime; link Gmail for one-tap login.",
+                            text = strf("acct_desc", selectedLanguage),
                             fontSize = 13.sp,
                             color = Color.DarkGray
                         )
@@ -2055,7 +2089,7 @@ fun PremiumMarketAnalyzerScreen() {
                             value = usernameInput,
                             onValueChange = { usernameInput = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Enter farmer name", color = Color.Gray) },
+                            placeholder = { Text(str("acct_name_hint"), color = Color.Gray) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp)
                         )
@@ -2064,7 +2098,7 @@ fun PremiumMarketAnalyzerScreen() {
                             onClick = {
                                 val name = usernameInput.trim()
                                 if (name.isBlank()) {
-                                    accountError = "Enter your farmer name to create the account."
+                                    accountError = tr("err_name_empty")
                                     return@Button
                                 }
                                 accountError = null
@@ -2076,7 +2110,7 @@ fun PremiumMarketAnalyzerScreen() {
                                         profile = accountRepo.getProfile()
                                         isUserLoggedIn = true
                                     } catch (e: Exception) {
-                                        accountError = "Could not create account: ${e.message ?: "try again"}"
+                                        accountError = trf("err_create_failed", e.message ?: "try again")
                                     }
                                 }
                             },
@@ -2084,7 +2118,7 @@ fun PremiumMarketAnalyzerScreen() {
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
                         ) {
-                            Text("Create Farmer Account", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(str("acct_create"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
@@ -2092,7 +2126,7 @@ fun PremiumMarketAnalyzerScreen() {
                             modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("🔵 Continue with Google (Gmail)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
+                            Text(str("acct_google"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         TextButton(onClick = {
@@ -2102,13 +2136,13 @@ fun PremiumMarketAnalyzerScreen() {
                             showCookieSettings = true
                         }) {
                             Text(
-                                "🍪 Cookie settings: ${consentState.choice} — tap to review",
+                                strf("acct_cookie_line", consentState.choice),
                                 fontSize = 12.sp, color = Color(0xFF1E3A8A)
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "🔒 Protected: your name and crops stay encrypted on this device (SQLCipher + Android Keystore). Only app code is on GitHub — local.properties and API keys are git-ignored and never committed.",
+                            text = str("acct_locked1"),
                             fontSize = 11.sp,
                             lineHeight = 15.sp,
                             color = Color.Gray
@@ -2126,16 +2160,16 @@ fun PremiumMarketAnalyzerScreen() {
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         val name = profile?.displayName?.ifBlank { usernameInput.trim().ifBlank { "Farmer" } } ?: usernameInput.trim().ifBlank { "Farmer" }
-                        val providerTag = if (profile?.authProvider == "google") " • 🔵 Google linked" else ""
+                        val providerTag = if (profile?.authProvider == "google") str("farm_google_tag") else ""
                         Text(
-                            text = "👨‍🌾 My Farm — $name$providerTag",
+                            text = strf("farm_title", name, providerTag),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2C2C2E)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${profile?.county?.ifBlank { selectedCounty.ifBlank { "Kenya" } } ?: selectedCounty.ifBlank { "Kenya" }} • ${cropHistory.size} saved crops • $selectedLanguage",
+                            text = strf("farm_meta", profile?.county?.ifBlank { selectedCounty.ifBlank { "Kenya" } } ?: selectedCounty.ifBlank { "Kenya" }, cropHistory.size, selectedLanguage),
                             fontSize = 12.sp,
                             color = Color.DarkGray
                         )
@@ -2152,7 +2186,7 @@ fun PremiumMarketAnalyzerScreen() {
                                     .background(Color(0xFFE8F5E9), RoundedCornerShape(10.dp))
                                     .padding(10.dp)
                             ) {
-                                Text("✨ For you: $interestSummary", fontSize = 12.sp, lineHeight = 17.sp, color = Color(0xFF1B5E20), fontWeight = FontWeight.Medium)
+                                Text(strf("farm_foryou", interestSummary), fontSize = 12.sp, lineHeight = 17.sp, color = Color(0xFF1B5E20), fontWeight = FontWeight.Medium)
                             }
                         }
                         Spacer(modifier = Modifier.height(10.dp))
@@ -2164,12 +2198,12 @@ fun PremiumMarketAnalyzerScreen() {
                             modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("🌱 My Crops — enter & price them in Market", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                            Text(str("farm_crops_btn"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                         }
                         if (cropHistory.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Recent: " + cropHistory.take(3).joinToString(", ") + " — tap Market for full details.",
+                                text = strf("farm_recent", cropHistory.take(3).joinToString(", ")),
                                 fontSize = 11.sp,
                                 color = Color.Gray
                             )
@@ -2184,14 +2218,14 @@ fun PremiumMarketAnalyzerScreen() {
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("Edit profile", fontSize = 12.sp, color = Color.Black)
+                                Text(str("farm_edit"), fontSize = 12.sp, color = Color.Black)
                             }
                             OutlinedButton(
                                 onClick = { showGoogleLink = true },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text(if (profile?.authProvider == "google") "Google ✓" else "Link Google", fontSize = 12.sp, color = Color(0xFF1E3A8A))
+                                Text(if (profile?.authProvider == "google") str("farm_google_ok") else str("farm_link_google"), fontSize = 12.sp, color = Color(0xFF1E3A8A))
                             }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -2204,7 +2238,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("Sign out", fontSize = 12.sp, color = Color.Black)
+                                Text(str("farm_signout"), fontSize = 12.sp, color = Color.Black)
                             }
                             TextButton(
                                 onClick = {
@@ -2223,7 +2257,7 @@ fun PremiumMarketAnalyzerScreen() {
                                     }
                                 }
                             ) {
-                                Text("Delete my data", fontSize = 12.sp, color = Color(0xFFB71C1C))
+                                Text(str("farm_delete"), fontSize = 12.sp, color = Color(0xFFB71C1C))
                             }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
@@ -2234,12 +2268,12 @@ fun PremiumMarketAnalyzerScreen() {
                             showCookieSettings = true
                         }) {
                             Text(
-                                "🍪 Cookies: ${consentState.choice}${if (consentState.personalization) " • personalizing for you" else " • not tracking"} — change",
+                                strf("farm_cookie_line", consentState.choice, if (consentState.personalization) str("farm_cookie_personal") else str("farm_cookie_generic")),
                                 fontSize = 11.sp, color = Color(0xFF1E3A8A)
                             )
                         }
                         Text(
-                            text = "🔒 Protected: account data is encrypted on this device only (SQLCipher + Keystore). Signing out keeps data; Delete wipes it. Nothing personal is pushed to GitHub.",
+                            text = str("acct_locked2"),
                             fontSize = 11.sp,
                             lineHeight = 15.sp,
                             color = Color.Gray
@@ -2254,22 +2288,22 @@ fun PremiumMarketAnalyzerScreen() {
             if (showCookieBanner) {
                 AlertDialog(
                     onDismissRequest = { },
-                    title = { Text("🍪 We use cookies", fontWeight = FontWeight.Bold) },
+                    title = { Text(str("cookie_title"), fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
                             Text(
-                                "M-AgriLink stores on-device preferences (like cookies) to remember your county, crops and language — and, only if you Allow, to learn what you need so the Market, Weather and AI recommendations get better for you.",
+                                str("cookie_text"),
                                 fontSize = 13.sp, lineHeight = 19.sp
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Choose Accept for the best personalization, or open Settings for granular control.", fontSize = 12.sp, color = Color.DarkGray)
+                            Text(str("cookie_sub"), fontSize = 12.sp, color = Color.DarkGray)
                         }
                     },
                     confirmButton = {
                         Button(
                             onClick = { saveConsent("accepted", true, true, true) },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                        ) { Text("Accept", color = Color.White, fontWeight = FontWeight.Bold) }
+                        ) { Text(str("cookie_accept"), color = Color.White, fontWeight = FontWeight.Bold) }
                     },
                     dismissButton = {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -2277,8 +2311,8 @@ fun PremiumMarketAnalyzerScreen() {
                                 tmpAnalytics = false; tmpPersonalization = false; tmpMarketing = false
                                 showCookieBanner = false
                                 showCookieSettings = true
-                            }) { Text("Settings", color = Color(0xFF1E3A8A)) }
-                            TextButton(onClick = { saveConsent("declined", false, false, false) }) { Text("Decline", color = Color.Gray) }
+                            }) { Text(str("cookie_settings_btn"), color = Color(0xFF1E3A8A)) }
+                            TextButton(onClick = { saveConsent("declined", false, false, false) }) { Text(str("cookie_decline"), color = Color.Gray) }
                         }
                     },
                     containerColor = Color.White,
@@ -2288,7 +2322,7 @@ fun PremiumMarketAnalyzerScreen() {
             if (showCookieSettings) {
                 AlertDialog(
                     onDismissRequest = { showCookieSettings = false; showCookieBanner = cookieManager.needsBanner() },
-                    title = { Text("🍪 Cookie settings", fontWeight = FontWeight.Bold) },
+                    title = { Text(str("cookie_sheet_title"), fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
                             @Composable fun consentRow(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
@@ -2300,18 +2334,18 @@ fun PremiumMarketAnalyzerScreen() {
                                     Switch(checked = checked, onCheckedChange = onChange)
                                 }
                             }
-                            consentRow("Analytics", "Anonymous usage counts to fix bugs.", tmpAnalytics, { tmpAnalytics = it })
-                            consentRow("Personalization", "Learn my crops & areas to rank Market and AI tips for me.", tmpPersonalization, { tmpPersonalization = it })
-                            consentRow("Offers", "Occasional relevant offers.", tmpMarketing, { tmpMarketing = it })
+                            consentRow(str("cr_analytics"), str("cr_analytics_d"), tmpAnalytics, { tmpAnalytics = it })
+                            consentRow(str("cr_personal"), str("cr_personal_d"), tmpPersonalization, { tmpPersonalization = it })
+                            consentRow(str("cr_offers"), str("cr_offers_d"), tmpMarketing, { tmpMarketing = it })
                             if (tmpPersonalization) {
                                 Spacer(modifier = Modifier.height(6.dp))
                                 val learned = try { interestTracker.summaryLine() } catch (e: Exception) { "" }
                                 Text(
-                                    if (learned.isNotBlank()) "📊 Learning: $learned" else "📊 Learning is on — your Market, Weather and AI use will personalize here.",
+                                    if (learned.isNotBlank()) strf("cr_learn_on", learned) else str("cr_learn_on_empty"),
                                     fontSize = 12.sp, color = Color(0xFF1B5E20)
                                 )
                             } else {
-                                Text("Tracking is off — recommendations stay generic.", fontSize = 12.sp, color = Color.Gray)
+                                Text(str("cr_learn_off"), fontSize = 12.sp, color = Color.Gray)
                             }
                         }
                     },
@@ -2322,10 +2356,10 @@ fun PremiumMarketAnalyzerScreen() {
                                 saveConsent(choice, tmpAnalytics, tmpPersonalization, tmpMarketing)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                        ) { Text("Save choices", color = Color.White, fontWeight = FontWeight.Bold) }
+                        ) { Text(str("cr_save"), color = Color.White, fontWeight = FontWeight.Bold) }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showCookieSettings = false; showCookieBanner = cookieManager.needsBanner() }) { Text("Close", color = Color.Gray) }
+                        TextButton(onClick = { showCookieSettings = false; showCookieBanner = cookieManager.needsBanner() }) { Text(str("dlg_close"), color = Color.Gray) }
                     },
                     containerColor = Color.White,
                     shape = RoundedCornerShape(16.dp)
@@ -2334,18 +2368,18 @@ fun PremiumMarketAnalyzerScreen() {
             if (showEditProfile) {
                 AlertDialog(
                     onDismissRequest = { showEditProfile = false },
-                    title = { Text("Edit profile", fontWeight = FontWeight.Bold) },
+                    title = { Text(str("ep_title"), fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
-                            OutlinedTextField(value = usernameInput, onValueChange = { usernameInput = it }, label = { Text("Display name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = usernameInput, onValueChange = { usernameInput = it }, label = { Text(str("ep_name")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = profileEmail, onValueChange = { profileEmail = it }, label = { Text("Email") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = profileEmail, onValueChange = { profileEmail = it }, label = { Text(str("ep_email")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = profilePhone, onValueChange = { profilePhone = it }, label = { Text("Phone") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = profilePhone, onValueChange = { profilePhone = it }, label = { Text(str("ep_phone")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = profileAcreage, onValueChange = { profileAcreage = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Acreage") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = profileAcreage, onValueChange = { profileAcreage = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text(str("ep_acre")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("County is changed from the Home county picker.", fontSize = 11.sp, color = Color.Gray)
+                            Text(str("ep_county_note"), fontSize = 11.sp, color = Color.Gray)
                             if (accountError != null) { Text(accountError ?: "", fontSize = 12.sp, color = Color(0xFFB71C1C)) }
                         }
                     },
@@ -2353,22 +2387,22 @@ fun PremiumMarketAnalyzerScreen() {
                         Button(
                             onClick = {
                                 val acres = profileAcreage.toDoubleOrNull()
-                                if (usernameInput.trim().isBlank()) { accountError = "Name cannot be empty."; return@Button }
-                                if (profileEmail.isNotBlank() && !profileEmail.contains("@")) { accountError = "Enter a valid email or leave it blank."; return@Button }
-                                if (acres == null || acres <= 0) { accountError = "Enter a valid acreage."; return@Button }
+                                if (usernameInput.trim().isBlank()) { accountError = tr("ep_err_name"); return@Button }
+                                if (profileEmail.isNotBlank() && !profileEmail.contains("@")) { accountError = tr("ep_err_email"); return@Button }
+                                if (acres == null || acres <= 0) { accountError = tr("ep_err_acre"); return@Button }
                                 accountError = null
                                 scope.launch {
                                     try {
                                         accountRepo.updateFullProfile(usernameInput.trim(), profileEmail.trim(), profilePhone.trim(), selectedCounty.ifBlank { profile?.county ?: "Baringo" }, acres)
                                         profile = accountRepo.getProfile()
                                         showEditProfile = false
-                                    } catch (e: Exception) { accountError = "Save failed: ${e.message ?: "try again"}" }
+                                    } catch (e: Exception) { accountError = trf("ep_save_fail", e.message ?: "try again") }
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                        ) { Text("Save", color = Color.White, fontWeight = FontWeight.Bold) }
+                        ) { Text(str("ep_save"), color = Color.White, fontWeight = FontWeight.Bold) }
                     },
-                    dismissButton = { TextButton(onClick = { showEditProfile = false }) { Text("Cancel", color = Color.Gray) } },
+                    dismissButton = { TextButton(onClick = { showEditProfile = false }) { Text(str("dlg_cancel"), color = Color.Gray) } },
                     containerColor = Color.White,
                     shape = RoundedCornerShape(16.dp)
                 )
@@ -2376,14 +2410,14 @@ fun PremiumMarketAnalyzerScreen() {
             if (showGoogleLink) {
                 AlertDialog(
                     onDismissRequest = { showGoogleLink = false },
-                    title = { Text("🔵 Link Google account", fontWeight = FontWeight.Bold) },
+                    title = { Text(str("gl_title"), fontWeight = FontWeight.Bold) },
                     text = {
                         Column {
-                            Text("Sign in with your Gmail to keep your farmer profile linked to Google on this device. No password leaves the phone — we store only the Gmail address.", fontSize = 13.sp, lineHeight = 18.sp)
+                            Text(str("gl_text"), fontSize = 13.sp, lineHeight = 18.sp)
                             Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = googleEmailInput, onValueChange = { googleEmailInput = it }, label = { Text("Gmail address") }, placeholder = { Text("you@gmail.com") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = googleEmailInput, onValueChange = { googleEmailInput = it }, label = { Text(str("gl_email")) }, placeholder = { Text(str("gl_email_hint")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = googleNameInput, onValueChange = { googleNameInput = it }, label = { Text("Display name (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = googleNameInput, onValueChange = { googleNameInput = it }, label = { Text(str("gl_display")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             if (accountError != null) { Text(accountError ?: "", fontSize = 12.sp, color = Color(0xFFB71C1C)) }
                         }
                     },
@@ -2392,7 +2426,7 @@ fun PremiumMarketAnalyzerScreen() {
                             onClick = {
                                 val email = googleEmailInput.trim()
                                 if (!email.contains("@") || !email.endsWith("gmail.com", ignoreCase = true)) {
-                                    accountError = "Enter a valid @gmail.com address."
+                                    accountError = tr("gl_err")
                                     return@Button
                                 }
                                 accountError = null
@@ -2404,13 +2438,13 @@ fun PremiumMarketAnalyzerScreen() {
                                         usernameInput = display
                                         isUserLoggedIn = true
                                         showGoogleLink = false
-                                    } catch (e: Exception) { accountError = "Google link failed: ${e.message ?: "try again"}" }
+                                    } catch (e: Exception) { accountError = trf("gl_fail", e.message ?: "try again") }
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A))
-                        ) { Text("Link Gmail", color = Color.White, fontWeight = FontWeight.Bold) }
+                        ) { Text(str("gl_save"), color = Color.White, fontWeight = FontWeight.Bold) }
                     },
-                    dismissButton = { TextButton(onClick = { showGoogleLink = false }) { Text("Cancel", color = Color.Gray) } },
+                    dismissButton = { TextButton(onClick = { showGoogleLink = false }) { Text(str("dlg_cancel"), color = Color.Gray) } },
                     containerColor = Color.White,
                     shape = RoundedCornerShape(16.dp)
                 )
@@ -2419,13 +2453,13 @@ fun PremiumMarketAnalyzerScreen() {
             // --- 1C. TIP OF THE DAY (retention: fresh value every open) ---
             run {
                 val farmTips = listOf(
-                    "🌱 Scout leaf undersides twice a week — most pests hide there before spreading.",
-                    "💧 Water early morning so leaves dry by noon and fungal spores can't settle.",
-                    "🐛 Hang one pheromone trap per corner to catch outbreaks a week early.",
-                    "💰 Sell the top-ranked Market page crop first — margins shift weekly.",
-                    "📸 A sharp, sunlit leaf photo scans 3x more accurately than a dark one.",
-                    "🌿 Mulch 5cm thick to lock moisture and starve weeds without chemicals.",
-                    "📦 Dry grain to 13.5% before bagging — damp bags grow aflatoxin fast."
+                    tr("tip_1"),
+                    tr("tip_2"),
+                    tr("tip_3"),
+                    tr("tip_4"),
+                    tr("tip_5"),
+                    tr("tip_6"),
+                    tr("tip_7")
                 )
                 val tipIndex = try {
                     (java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR) % farmTips.size)
@@ -2440,7 +2474,7 @@ fun PremiumMarketAnalyzerScreen() {
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
                 ) {
                     Text(
-                        text = "☀️ Tip of the day: ${farmTips[tipIndex]}",
+                        text = strf("tip_prefix", farmTips[tipIndex]),
                         color = Color(0xFF2C2C2E),
                         fontSize = 13.sp,
                         lineHeight = 19.sp,
@@ -2454,11 +2488,11 @@ fun PremiumMarketAnalyzerScreen() {
             // Active viewport indicator: Home resets to primary dashboard.
             Text(
                 text = when (activeViewport) {
-                    "market" -> "📊 Viewport: Market Overview • $selectedLanguage"
-                    "weather" -> "🌦 Viewport: Weather Terminal • $selectedLanguage"
-                    "account" -> "👨‍🌾 Viewport: My Account • $selectedLanguage"
-                    "articles" -> "📰 Viewport: AgriTech News • $selectedLanguage"
-                    else -> "🏠 Viewport: Home Dashboard • $selectedLanguage"
+                    "market" -> strf("vp_market", selectedLanguage)
+                    "weather" -> strf("vp_weather", selectedLanguage)
+                    "account" -> strf("vp_account", selectedLanguage)
+                    "articles" -> strf("vp_articles", selectedLanguage)
+                    else -> strf("vp_home", selectedLanguage)
                 },
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -2525,7 +2559,7 @@ fun PremiumMarketAnalyzerScreen() {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
-                text = "Target County Corridor Hub",
+                text = str("home_corridor"),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = contentPrimary,
@@ -2549,14 +2583,14 @@ fun PremiumMarketAnalyzerScreen() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (selectedCounty.isEmpty()) "Tap to select target region..." else selectedCounty,
+                        text = if (selectedCounty.isEmpty()) str("home_tap") else selectedCounty,
                         color = if (selectedCounty.isEmpty()) Color.DarkGray else Color.Black, // ⚠️ FIX: Highly visible text out in the sun
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium
                     )
                     Icon(
                         imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Dropdown Arrow",
+                        contentDescription = str("home_dropdown"),
                         tint = Color(0xFFE6B325),
                         modifier = Modifier.size(28.dp)
                     )
@@ -2584,7 +2618,7 @@ fun PremiumMarketAnalyzerScreen() {
 
             // --- 2B. FARMER PLANTED CROP INPUT MODULE ---
             Text(
-                text = "🌱 What Crop Have You Planted?",
+                text = str("home_crop_q"),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = contentPrimary,
@@ -2595,7 +2629,7 @@ fun PremiumMarketAnalyzerScreen() {
                 value = farmerPlantedCrop,
                 onValueChange = { farmerPlantedCrop = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Type Maize, Beans, Onions, Sorghum...", color = Color.Gray) },
+                placeholder = { Text(str("home_crop_hint"), color = Color.Gray) },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -2634,7 +2668,7 @@ fun PremiumMarketAnalyzerScreen() {
             if (cropMatch?.corrected == true && farmerPlantedCrop.isNotBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "🔍 Showing results for \"${cropMatch.canonical}\" (you typed \"${cropMatch.original}\")",
+                    text = strf("home_corrected", cropMatch.canonical, cropMatch.original),
                     fontSize = 12.sp,
                     color = contentAccent,
                     fontWeight = FontWeight.Medium,
@@ -2645,7 +2679,7 @@ fun PremiumMarketAnalyzerScreen() {
             if (cropHistory.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "⏱ My recent crops",
+                    text = str("home_recent"),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = contentPrimary,
@@ -2670,7 +2704,7 @@ fun PremiumMarketAnalyzerScreen() {
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    "Tap a recent crop for full KAMIS trend & analysis.",
+                    str("home_recent_hint"),
                     fontSize = 11.sp,
                     color = Color.Gray,
                     modifier = Modifier.padding(start = 4.dp)
@@ -2695,7 +2729,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "📋 My Field Operation Blueprint",
+                                    text = str("bp_title"),
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF2C2C2E),
@@ -2717,7 +2751,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 ) {
                                     Icon(
                                         imageVector = if (AppAudioGate.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                                        contentDescription = if (AppAudioGate.muted) "Unmute all audio" else "Mute all audio",
+                                        contentDescription = if (AppAudioGate.muted) str("bp_unmute") else str("bp_mute"),
                                         tint = Color(0xFFE6B325)
                                     )
                                 }
@@ -2731,30 +2765,30 @@ fun PremiumMarketAnalyzerScreen() {
                             )
                             Divider(color = Color(0xFFE0E0E0), modifier = Modifier.padding(vertical = 12.dp))
                             Text(
-                                text = "🚜 Immediate Action:",
+                                text = str("bp_action"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.Black
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(blueprintCrop.advisory.plantingSpacing, color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
+                            Text(advisoryField(blueprintCrop.advisory, "space"), color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(blueprintCrop.advisory.landPrep, color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
+                            Text(advisoryField(blueprintCrop.advisory, "land"), color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = "🌾 Safe Harvesting Marker:",
+                                text = str("bp_harvest"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.Black
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(blueprintCrop.advisory.moistureCeiling, color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
+                            Text(advisoryField(blueprintCrop.advisory, "moist"), color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(blueprintCrop.advisory.harvestNote, color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
+                            Text(advisoryField(blueprintCrop.advisory, "harvest"), color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
                             Spacer(modifier = Modifier.height(12.dp))
                             // --- 2D. LIVE METEOROLOGICAL ALERT STRIP ---
                             Text(
-                                text = "⚠️ Live Crop Management Advisory",
+                                text = str("live_mgmt"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFA75D5D)
@@ -2794,7 +2828,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "🌐 Live Crop Brief: $farmerPlantedCrop",
+                                    text = strf("live_brief_title", farmerPlantedCrop),
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF2C2C2E),
@@ -2831,14 +2865,14 @@ fun PremiumMarketAnalyzerScreen() {
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Text(
-                                        "Searching live sources…",
+                                        str("live_searching"),
                                         color = Color.DarkGray,
                                         fontSize = 13.sp
                                     )
                                 }
                             } else {
                                 Text(
-                                    liveBrief ?: "No blueprint found for \"$farmerPlantedCrop\" — try Maize, Beans, Onions or Sorghum.",
+                                    liveBrief ?: strf("live_none", farmerPlantedCrop),
                                     color = Color.DarkGray,
                                     fontSize = 13.sp,
                                     lineHeight = 19.sp
@@ -2846,7 +2880,7 @@ fun PremiumMarketAnalyzerScreen() {
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "Auto-saved to My recent crops on this device.",
+                                str("live_saved"),
                                 color = Color.Gray,
                                 fontSize = 12.sp
                             )
@@ -2870,7 +2904,7 @@ fun PremiumMarketAnalyzerScreen() {
                         Icon(imageVector = Icons.Default.ShowChart, contentDescription = null, tint = Color(0xFFE6B325))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Arbitrage Analysis Output",
+                            text = str("arb_title"),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFE6B325)
@@ -2881,14 +2915,14 @@ fun PremiumMarketAnalyzerScreen() {
 
                     if (selectedCounty.isEmpty()) {
                         Text(
-                            text = "Choose a destination trading hub above to dynamically calculate local vs cross-border profit margins, logistics costs, and regional advisory records.",
+                            text = str("arb_empty"),
                             color = Color.LightGray,
                             fontSize = 14.sp,
                             lineHeight = 22.sp
                         )
                     } else {
                         Text(
-                            text = "Corridor Route: Baringo Local ➔ $selectedCounty",
+                            text = strf("arb_route", selectedCounty),
                             color = Color.White,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
@@ -2907,20 +2941,20 @@ fun PremiumMarketAnalyzerScreen() {
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        "Local Price: KES ${crop.localPriceKes}",
+                                        strf("arb_local", crop.localPriceKes),
                                         color = Color.White,
                                         fontSize = 13.sp
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        crop.advisory.plantingSpacing,
+                                        advisoryField(crop.advisory, "space"),
                                         color = Color.Gray,
                                         fontSize = 11.sp,
                                         lineHeight = 14.sp
                                     )
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text("Hub Target Price", color = Color.LightGray, fontSize = 14.sp)
+                                    Text(str("arb_hub"), color = Color.LightGray, fontSize = 14.sp)
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         "KES ${crop.hubPriceKes}",
@@ -2930,7 +2964,7 @@ fun PremiumMarketAnalyzerScreen() {
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        "+KES ${crop.netMarginKes} net",
+                                        strf("arb_net", crop.netMarginKes),
                                         color = Color(0xFF81C784),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
@@ -2946,8 +2980,8 @@ fun PremiumMarketAnalyzerScreen() {
                                 .padding(10.dp)
                         ) {
                             Text(
-                                text = countyData.firstOrNull()?.advisory?.moistureCeiling
-                                    ?: "Dry grain to 13.5% moisture ceiling before bagging.",
+                                text = countyData.firstOrNull()?.let { advisoryField(it.advisory, "moist") }
+                                    ?: str("arb_moist_fallback"),
                                 color = Color(0xFF81C784), // Positive Green highlight
                                 fontSize = 13.sp,
                                 lineHeight = 18.sp,
@@ -2997,7 +3031,7 @@ fun PremiumMarketAnalyzerScreen() {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "🏥 Crop Disease Diagnostics",
+                            text = str("scan_title"),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2C2C2E)
@@ -3005,7 +3039,7 @@ fun PremiumMarketAnalyzerScreen() {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Snap or upload any crop photo — leaf, fruit, or stem — for instant Google-AI control and management steps.",
+                        text = str("scan_desc"),
                         color = Color.DarkGray,
                         fontSize = 13.sp,
                         lineHeight = 18.sp
@@ -3019,11 +3053,11 @@ fun PremiumMarketAnalyzerScreen() {
                             googleBrief = null
                             googleSource = ""
                             googleLoading = false
-                            imageSourceLabel = "Camera live"
+                            imageSourceLabel = tr("src_camera")
                             galleryBitmap = null
                             isGalleryMode = false
                             analyzerAttached = false
-                            liveDiagnosis = "Point the lens at a ${farmerPlantedCrop.trim().ifBlank { "crop" }} leaf or fruit…"
+                            liveDiagnosis = trf("scan_point", farmerPlantedCrop.trim().ifBlank { tr("scan_crop_fallback") })
                             liveConfidence = 0f
                             liveSource = "on-device analyzer"
                             scannerError = null
@@ -3037,7 +3071,7 @@ fun PremiumMarketAnalyzerScreen() {
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2E))
                     ) {
-                        Text("Launch AI Camera Scanner", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(str("scan_launch"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
@@ -3045,14 +3079,13 @@ fun PremiumMarketAnalyzerScreen() {
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("🖼️ Upload Crop Image Instead", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                        Text(str("scan_upload"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                     }
                     if (scanResult != null) {
                         Spacer(modifier = Modifier.height(10.dp))
                         val scanOk = liveConfidence >= 0.55f &&
-                            !liveDiagnosis.startsWith("Invalid") &&
-                            !liveDiagnosis.startsWith("Uncertain") &&
-                            !liveDiagnosis.startsWith("Point the lens")
+                            !isInvalidLensText(liveDiagnosis) &&
+                            !isPointLensText(liveDiagnosis)
                         if (scanOk) {
                             ScanOverviewCard(
                                 plantedCrop = farmerPlantedCrop,
@@ -3124,7 +3157,7 @@ fun PremiumMarketAnalyzerScreen() {
                     },
                     title = {
                         Text(
-                            "AI Field Camera Scanner",
+                            str("dlg_scanner"),
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2C2C2E)
                         )
@@ -3133,7 +3166,7 @@ fun PremiumMarketAnalyzerScreen() {
                         Column {
                             if (!hasCameraPermission) {
                                 Text(
-                                    "Camera access is needed to scan crop leaves live in the field.",
+                                    str("scan_need_cam"),
                                     color = Color.Black,
                                     fontSize = 14.sp,
                                     lineHeight = 20.sp
@@ -3147,7 +3180,7 @@ fun PremiumMarketAnalyzerScreen() {
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2E))
                                 ) {
-                                    Text("Grant Camera Access", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(str("scan_grant"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 }
                             } else {
                                 Box(
@@ -3160,7 +3193,7 @@ fun PremiumMarketAnalyzerScreen() {
                                     if (isGalleryMode && galleryBitmap != null) {
                                         Image(
                                             bitmap = galleryBitmap!!.asImageBitmap(),
-                                            contentDescription = "Uploaded crop image",
+                                            contentDescription = str("scan_uploaded_img"),
                                             modifier = Modifier.matchParentSize()
                                         )
                                     } else {
@@ -3219,25 +3252,25 @@ fun PremiumMarketAnalyzerScreen() {
                                                                                 liveDiagnosis = smart.diagnosis.label
                                                                                 liveConfidence = smart.diagnosis.confidence
                                                                                 liveSource = smart.diagnosis.source
-                                                                                scannerError = smart.quality.guidance
+                                                                                scannerError = qualityGuidance(smart.quality, (smart.diagnosis.confidence * 100).toInt())
                                                                             }
                                                                         }
                                                                     }
                                                                 } catch (e: ImageProcessingException) {
-                                                                    val msg = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
+                                                                    val msg = tr("scan_frame_fail")
                                                                     mainPoster.execute { scannerError = msg }
                                                                 } catch (e: IllegalStateException) {
-                                                                    val msg = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
+                                                                    val msg = tr("scan_frame_fail")
                                                                     mainPoster.execute { scannerError = msg }
                                                                 }
                                                             } catch (e: Exception) {
-                                                                val msg = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
+                                                                val msg = tr("scan_frame_fail")
                                                                 mainPoster.execute { scannerError = msg }
                                                             } finally {
                                                                 try {
                                                                     imageProxy.close()
                                                                 } catch (e: Exception) {
-                                                                    val msg = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
+                                                                    val msg = tr("scan_frame_fail")
                                                                     mainPoster.execute { scannerError = msg }
                                                                 }
                                                             }
@@ -3268,7 +3301,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                 )
                                         )
                                         Text(
-                                            "🔍 AI Analyzer: Scanning crop leaves for anomalies...",
+                                            str("scan_analyzing"),
                                             color = Color.White,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold,
@@ -3286,7 +3319,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                 googleBrief = null
                                                 googleSource = ""
                                                 googleLoading = false
-                                                imageSourceLabel = "Camera live"
+                                                imageSourceLabel = tr("src_camera")
                                                 galleryBitmap = null
                                                 isGalleryMode = false
                                                 isAnalyzing = true
@@ -3303,7 +3336,7 @@ fun PremiumMarketAnalyzerScreen() {
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Filled.Circle,
-                                                contentDescription = "Capture leaf scan",
+                                                contentDescription = str("scan_capture"),
                                                 tint = Color.White,
                                                 modifier = Modifier.size(56.dp)
                                             )
@@ -3339,7 +3372,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 ) {
                                     Column {
                                         Text(
-                                            "📷 Live lens: $liveDiagnosis",
+                                            strf("scan_live_lens", liveDiagnosis),
                                             color = Color.Black,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold,
@@ -3347,7 +3380,7 @@ fun PremiumMarketAnalyzerScreen() {
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            "Confidence: ${(liveConfidence * 100).toInt()}% • $liveSource",
+                                            strf("scan_conf", (liveConfidence * 100).toInt(), liveSource),
                                             color = Color.DarkGray,
                                             fontSize = 12.sp
                                         )
@@ -3360,15 +3393,14 @@ fun PremiumMarketAnalyzerScreen() {
                                         delay(2500)
                                         val invalid = scannerError != null ||
                                             liveConfidence < 0.55f ||
-                                            liveDiagnosis.startsWith("Invalid") ||
-                                            liveDiagnosis.startsWith("Uncertain") ||
-                                            liveDiagnosis.startsWith("Point the lens")
+                                            isInvalidLensText(liveDiagnosis) ||
+                                            isPointLensText(liveDiagnosis)
                                         if (invalid) {
                                             if (scannerError == null) {
                                                 scannerError = if (isGalleryMode) {
-                                                    "⚠️ Scanner Alert: That upload is unclear — pick a brighter, sharper crop photo (leaf, fruit, or stem filling the frame) or upload another image."
+                                                    tr("scan_upload_unclear")
                                                 } else {
-                                                    "⚠️ Scanner Alert: Scan unclear — clean the lens, improve lighting, point at a crop leaf or fruit filling the frame, and tap capture again."
+                                                    tr("scan_cam_unclear")
                                                 }
                                             }
                                             diseaseScanComplete = false
@@ -3381,7 +3413,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 // Always-visible scanner status so uploads never look dead.
                                 Text(
-                                    text = "📡 $imageSourceLabel • lens: $liveDiagnosis (${(liveConfidence * 100).toInt()}%)",
+                                    text = strf("scan_status", imageSourceLabel, liveDiagnosis, (liveConfidence * 100).toInt()),
                                     color = Color.DarkGray,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium
@@ -3393,13 +3425,13 @@ fun PremiumMarketAnalyzerScreen() {
                                         modifier = Modifier.fillMaxWidth().height(44.dp),
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Text("🖼️ Upload another image", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                        Text(str("scan_upload_another"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
                                 if (isAnalyzing) {
                                     Text(
-                                        "🔍 AI Analyzer: Scanning ${if (isGalleryMode) "uploaded image" else "crop leaves and fruits"} for anomalies...",
+                                        strf("scan_analyzing_what", if (isGalleryMode) str("scan_what_uploaded") else str("scan_what_leaves")),
                                         color = Color.Black,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
@@ -3414,7 +3446,7 @@ fun PremiumMarketAnalyzerScreen() {
                                     )
                                 } else if (!diseaseScanComplete) {
                                     Text(
-                                        "Tap the capture circle to scan ${farmerPlantedCrop.trim().ifBlank { "crop" }} leaves with the back camera.",
+                                        strf("scan_tap_capture", farmerPlantedCrop.trim().ifBlank { tr("scan_crop_fallback") }),
                                         color = Color.DarkGray,
                                         fontSize = 13.sp,
                                         lineHeight = 18.sp
@@ -3448,7 +3480,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                         activeWindSpeed
                                                     )
                                                 } catch (e: Exception) {
-                                                    "Google lookup failed. Check connection and use the buttons below." to "OFFLINE"
+                                                    tr("google_fail") to "OFFLINE"
                                                 }
                                                 googleBrief = text
                                                 googleSource = source
@@ -3468,7 +3500,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                         horizontalArrangement = Arrangement.SpaceBetween
                                                     ) {
                                                         Text(
-                                                            "🔎 Google AI Crop Details",
+                                                            str("google_title"),
                                                             fontSize = 13.sp,
                                                             fontWeight = FontWeight.Bold,
                                                             color = Color.Black,
@@ -3497,7 +3529,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                     }
                                                     Spacer(modifier = Modifier.height(6.dp))
                                                     Text(
-                                                        "Source: $imageSourceLabel • any crop part (leaf, fruit, stem)",
+                                                        strf("google_src", imageSourceLabel),
                                                         fontSize = 11.sp,
                                                         color = Color.Gray
                                                     )
@@ -3510,11 +3542,11 @@ fun PremiumMarketAnalyzerScreen() {
                                                                 color = Color(0xFF1E3A8A)
                                                             )
                                                             Spacer(modifier = Modifier.width(8.dp))
-                                                            Text("Pulling Google AI details…", fontSize = 12.sp, color = Color.DarkGray)
+                                                            Text(str("google_pulling"), fontSize = 12.sp, color = Color.DarkGray)
                                                         }
                                                     } else {
                                                         Text(
-                                                            googleBrief ?: "Google details will appear here when online.",
+                                                            googleBrief ?: str("google_empty"),
                                                             fontSize = 12.sp,
                                                             lineHeight = 18.sp,
                                                             color = Color(0xFF2C2C2E)
@@ -3527,7 +3559,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                         modifier = Modifier.fillMaxWidth().height(44.dp),
                                                         shape = RoundedCornerShape(10.dp)
                                                     ) {
-                                                        Text("🔍 Open Full Details on Google", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
+                                                        Text(str("google_open"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
                                                     }
                                                     Spacer(modifier = Modifier.height(6.dp))
                                                     Row(
@@ -3539,14 +3571,14 @@ fun PremiumMarketAnalyzerScreen() {
                                                             modifier = Modifier.weight(1f).height(44.dp),
                                                             shape = RoundedCornerShape(10.dp)
                                                         ) {
-                                                            Text("▶️ YouTube", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                                            Text(str("btn_youtube"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                                         }
                                                         OutlinedButton(
                                                             onClick = { openWebLink("https://www.facebook.com/search/top?q=$encoded") },
                                                             modifier = Modifier.weight(1f).height(44.dp),
                                                             shape = RoundedCornerShape(10.dp)
                                                         ) {
-                                                            Text("📘 Facebook", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                                            Text(str("btn_facebook"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                                         }
                                                     }
                                                 }
@@ -3568,7 +3600,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                 shape = RoundedCornerShape(12.dp)
                                             ) {
                                                 Text(
-                                                    "View full advisory profile on CABI Plantwise Bank",
+                                                    str("btn_cabi"),
                                                     fontSize = 13.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color(0xFF2E7D32)
@@ -3585,21 +3617,21 @@ fun PremiumMarketAnalyzerScreen() {
                                 val valid = diseaseScanComplete &&
                                     scannerError == null &&
                                     liveConfidence >= 0.55f &&
-                                    !liveDiagnosis.startsWith("Invalid") &&
-                                    !liveDiagnosis.startsWith("Uncertain") &&
-                                    !liveDiagnosis.startsWith("Point the lens")
+                                    !isInvalidLensText(liveDiagnosis) &&
+                                    !isPointLensText(liveDiagnosis)
                                 if (valid) {
                                     val confidencePct = (liveConfidence * 100).toInt()
-                                    var full = "Live lens match ($imageSourceLabel): $liveDiagnosis ($confidencePct% confidence via $liveSource).\n\n" +
+                                    var full = trf("scan_full_prefix", imageSourceLabel, liveDiagnosis, confidencePct, liveSource) + "\n\n" +
                                         cropFullAdvisoryText(farmerPlantedCrop, liveDiagnosis, confidencePct, liveSource)
-                                    if (!googleBrief.isNullOrBlank()) {
-                                        full += "\n\n🔎 Google AI ($googleSource): $googleBrief"
+                                    val brief = googleBrief
+                                    if (!brief.isNullOrBlank()) {
+                                        full += "\n\n" + trf("scan_full_google", googleSource, brief)
                                     }
                                     scanResult = full
                                 } else if (scannerError != null) {
                                     scanResult = scannerError
                                 } else {
-                                    scanResult = "⚠️ Scan unclear — no valid crop captured. Clean the lens, improve lighting, point at a crop leaf, fruit, or stem filling the frame, and launch the scanner again."
+                                    scanResult = tr("scan_confirm_unclear")
                                 }
                                 isScanningForDisease = false
                                 diseaseScanComplete = false
@@ -3609,7 +3641,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 analyzerAttached = false
                             }
                         ) {
-                            Text("Close Scan", fontWeight = FontWeight.Bold, color = Color(0xFFA75D5D))
+                            Text(str("scan_close"), fontWeight = FontWeight.Bold, color = Color(0xFFA75D5D))
                         }
                     },
                     containerColor = Color.White,
@@ -3634,7 +3666,7 @@ fun PremiumMarketAnalyzerScreen() {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "💬 Ask Shamba AI",
+                            text = str("shamba_title"),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -3642,7 +3674,7 @@ fun PremiumMarketAnalyzerScreen() {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Type how your farm, crops or cattle are behaving — Shamba replies with friendly advice in English or Kiswahili.",
+                        text = str("shamba_desc"),
                         color = Color(0xFFE8F5E9),
                         fontSize = 13.sp,
                         lineHeight = 18.sp
@@ -3654,7 +3686,7 @@ fun PremiumMarketAnalyzerScreen() {
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.White)
                     ) {
-                        Text("Start Chat", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(str("shamba_start"), color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
             }
@@ -3697,7 +3729,7 @@ fun PremiumMarketAnalyzerScreen() {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "🚚 Lorry Logistics Finder",
+                            text = str("lorry_title"),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFE6B325)
@@ -3722,7 +3754,7 @@ fun PremiumMarketAnalyzerScreen() {
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
                     ) {
                         Text(
-                            if (logisticsTapped) "Hide Transporter Contacts" else "Find Lorry Now",
+                            if (logisticsTapped) str("lorry_hide") else str("lorry_find"),
                             color = Color.Black,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
@@ -3732,7 +3764,7 @@ fun PremiumMarketAnalyzerScreen() {
                         Spacer(modifier = Modifier.height(10.dp))
                         if (transportTasks.isNotEmpty()) {
                             Text(
-                                "🧾 My transport tasks — track your lorry:",
+                                str("lorry_tasks"),
                                 color = Color(0xFFE6B325),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
@@ -3799,14 +3831,14 @@ fun PremiumMarketAnalyzerScreen() {
                                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
                                                 ) {
                                                     Text(
-                                                        if (task.status == "REQUESTED") "🚚 Mark En Route" else "✅ Mark Delivered",
+                                                        if (task.status == "REQUESTED") str("lorry_enroute") else str("lorry_delivered"),
                                                         color = Color.Black,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 12.sp
                                                     )
                                                 }
                                                 TextButton(onClick = { cancelTask(task) }) {
-                                                    Text("Cancel", color = Color.Gray, fontSize = 12.sp)
+                                                    Text(str("dlg_cancel"), color = Color.Gray, fontSize = 12.sp)
                                                 }
                                             }
                                         }
@@ -3817,7 +3849,7 @@ fun PremiumMarketAnalyzerScreen() {
                         if (registeredLorries.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                "✓ Driver-registered lorries:",
+                                str("lorry_registered"),
                                 color = Color(0xFFE6B325),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
@@ -3854,14 +3886,14 @@ fun PremiumMarketAnalyzerScreen() {
                                                 shape = RoundedCornerShape(10.dp),
                                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
                                             ) {
-                                                Text("📞 Call", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Text(str("lorry_call"), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                             }
                                             OutlinedButton(
                                                 onClick = { whatsappTransport(lorry.driverName, lorry.phone, lorry.capacity) },
                                                 modifier = Modifier.weight(1f).height(42.dp),
                                                 shape = RoundedCornerShape(10.dp)
                                             ) {
-                                                Text("💬 WhatsApp", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Text(str("lorry_wa"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                             }
                                             Button(
                                                 onClick = { hireTransport("${lorry.driverName} (${lorry.capacity})", lorry.phone) },
@@ -3869,7 +3901,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                 shape = RoundedCornerShape(10.dp),
                                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
                                             ) {
-                                                Text("🚜 Hire", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                Text(str("lorry_hire"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                             }
                                         }
                                     }
@@ -3878,7 +3910,7 @@ fun PremiumMarketAnalyzerScreen() {
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            "Demo directory — tap Call or WhatsApp to book:",
+                            str("lorry_demo"),
                             color = Color(0xFFE6B325),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
@@ -3944,7 +3976,7 @@ fun PremiumMarketAnalyzerScreen() {
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(
-                                if (showRegisterForm) "Close lorry registration" else "＋ Register my lorry (driver)",
+                                if (showRegisterForm) str("lorry_close_reg") else str("lorry_open_reg"),
                                 color = Color.White,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
@@ -3952,11 +3984,11 @@ fun PremiumMarketAnalyzerScreen() {
                         }
                         if (showRegisterForm) {
                             Spacer(modifier = Modifier.height(8.dp))
-                            lorryField(regDriver, { regDriver = it }, "Driver / SACCO name")
-                            lorryField(regPhone, { regPhone = it }, "Phone e.g. 0722000000")
-                            lorryField(regCapacity, { regCapacity = it }, "Capacity e.g. 10T")
-                            lorryField(regTown, { regTown = it }, "Base town e.g. Marigat")
-                            lorryField(regRoute, { regRoute = it }, "Route e.g. Marigat → Nairobi Hub")
+                            lorryField(regDriver, { regDriver = it }, str("lorry_hint_name"))
+                            lorryField(regPhone, { regPhone = it }, str("lorry_hint_phone"))
+                            lorryField(regCapacity, { regCapacity = it }, str("lorry_hint_capacity"))
+                            lorryField(regTown, { regTown = it }, str("lorry_hint_town"))
+                            lorryField(regRoute, { regRoute = it }, str("lorry_hint_route"))
                             Button(
                                 onClick = {
                                     val town = regTown.trim().ifBlank { selectedCounty.ifBlank { "Baringo" } }
@@ -3986,7 +4018,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
                             ) {
-                                Text("Save lorry", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(str("lorry_save"), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             }
                         }
                     }
@@ -4012,7 +4044,7 @@ fun PremiumMarketAnalyzerScreen() {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "💰 SACCO Input Planner",
+                            text = str("sac3_title"),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2C2C2E)
@@ -4020,8 +4052,8 @@ fun PremiumMarketAnalyzerScreen() {
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (selectedCounty.isEmpty()) "Wholesale seed & fertilizer trends (Baringo baseline)."
-                        else "Wholesale trends for $selectedCounty — budget before planting.",
+                        text = if (selectedCounty.isEmpty()) str("sac3_sub_empty")
+                        else strf("sac3_sub_county", selectedCounty),
                         color = Color.DarkGray,
                         fontSize = 13.sp
                     )
@@ -4055,7 +4087,7 @@ fun PremiumMarketAnalyzerScreen() {
                             .padding(10.dp)
                     ) {
                         Text(
-                            "Micro-saving tip: Save KES 250/week via SACCO to cover 1 acre DAP + seed before rains.",
+                            str("sac3_tip"),
                             color = Color(0xFF2E7D32),
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
@@ -4084,7 +4116,7 @@ fun PremiumMarketAnalyzerScreen() {
                 modifier = Modifier.padding(end = 8.dp)
             )
             Text(
-                text = "Launch Regional Corridor Analyzer",
+                text = str("cta_launch"),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White

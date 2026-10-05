@@ -1,5 +1,7 @@
 package com.example.m_agrilink.data
 
+import com.example.m_agrilink.ui.tr
+import com.example.m_agrilink.ui.trf
 import kotlin.math.abs
 
 /**
@@ -12,7 +14,8 @@ data class AgronomicAdvisory(
     val landPrep: String,
     val plantingSpacing: String,
     val moistureCeiling: String,
-    val harvestNote: String
+    val harvestNote: String,
+    val key: String = ""
 )
 
 data class CropMarketRecord(
@@ -62,21 +65,21 @@ object MarketDataRepository {
         val moduleTag: String = PRODUCTION_MODULE_TAG
     ) {
         fun headlineLines(): List<String> = listOf(
-            "• $transporterCount Verified Transporters available near $regionLabel heading to $hubDestination tonight.",
-            "• Estimated Transit Cost: KES $transitCostMinKes - KES $transitCostMaxKes per bag of grain/produce.",
-            "• Security Status: $securityStatus Tap to contact driver."
+            trf("logi_line1", transporterCount, regionLabel, hubDestination),
+            trf("logi_line2", transitCostMinKes, transitCostMaxKes),
+            trf("logi_line3", securityStatus)
         )
     }
 
     fun getLorrySnapshot(countyLabel: String): LorryLogisticsSnapshot {
-        val region = normalizeCounty(countyLabel.ifBlank { "your location" })
+        val region = normalizeCounty(countyLabel.ifBlank { tr("lorry_you") })
         return LorryLogisticsSnapshot(
-            regionLabel = if (countyLabel.isBlank()) "your location" else region,
+            regionLabel = if (countyLabel.isBlank()) tr("lorry_you") else region,
             transporterCount = 3,
             hubDestination = "Nairobi Hub",
             transitCostMinKes = 120,
             transitCostMaxKes = 150,
-            securityStatus = "Active corridors clear."
+            securityStatus = tr("lorry_security")
         )
     }
 
@@ -129,19 +132,19 @@ object MarketDataRepository {
     fun getSaccoCatalog(): SaccoInputCatalog = SaccoInputCatalog(
         items = listOf(
             SaccoInputItem(
-                name = "Certified DAP Fertilizer",
-                spec = "50Kg Bag",
+                name = tr("sac_item_dap"),
+                spec = tr("sac_item_dap_spec"),
                 priceKes = 2500,
-                badge = "SACCO Standard Subsidized"
+                badge = tr("sac_item_dap_badge")
             ),
             SaccoInputItem(
-                name = "Certified Maize Seed",
-                spec = "2Kg Packet - H614",
+                name = tr("sac_item_seed"),
+                spec = tr("sac_item_seed_spec"),
                 priceKes = 520
             ),
             SaccoInputItem(
-                name = "Organic Compost / Bio-fertilizer",
-                spec = "50Kg Bag",
+                name = tr("sac_item_compost"),
+                spec = tr("sac_item_compost_spec"),
                 priceKes = 1200
             )
         )
@@ -160,29 +163,35 @@ object MarketDataRepository {
     data class PestAdvisoryProfile(
         val pestName: String,
         val cropScope: String,
+        val profileKey: String,
         val cultural: SourcedRemedy,
         val ecological: SourcedRemedy,
         val chemical: SourcedRemedy
     ) {
-        fun cardLines(): List<String> = listOf(
-            "💡 Cultural Remedy [Source: ${cultural.source}]: ${cultural.text}",
-            "🌱 Ecological Strategy [Source: ${ecological.source}]: ${ecological.text}",
-            "🧪 Safe Chemical Action [Source: ${chemical.source}]: ${chemical.text}"
-        )
+        fun cardLines(): List<String> {
+            val k = profileKey.ifBlank { "general" }
+            return listOf(
+                "${tr("rem_cat_cultural")} [Source: ${cultural.source}]: ${tr("rem_${k}_cultural")}",
+                "${tr("rem_cat_eco")} [Source: ${ecological.source}]: ${tr("rem_${k}_eco")}",
+                "${tr("rem_cat_chem")} [Source: ${chemical.source}]: ${tr("rem_${k}_chem")}"
+            )
+        }
     }
 
     private fun groundedProfile(
         pestName: String,
         cropScope: String,
+        profileKey: String = "general",
         culturalText: String = "Handpick and crush visible egg masses twice a week to disrupt lifecycle progression.",
         ecologicalText: String = "Implement the Push-Pull methodology by intercropping with Desmodium to repel moths naturally.",
         chemicalText: String = "If infestation tracking exceeds a strict 20% plot threshold, apply registered spot-treatments like Emamectin Benzoate directly into the crop whorl."
     ): PestAdvisoryProfile = PestAdvisoryProfile(
         pestName = pestName,
         cropScope = cropScope,
-        cultural = SourcedRemedy("💡 Cultural Remedy", culturalText, "CABI Plantwise Bank"),
-        ecological = SourcedRemedy("🌱 Ecological Strategy", ecologicalText, "icipe Kenya"),
-        chemical = SourcedRemedy("🧪 Safe Chemical Action", chemicalText, "UN FAO & KALRO")
+        profileKey = profileKey,
+        cultural = SourcedRemedy(tr("rem_cat_cultural"), culturalText, "CABI Plantwise Bank"),
+        ecological = SourcedRemedy(tr("rem_cat_eco"), ecologicalText, "icipe Kenya"),
+        chemical = SourcedRemedy(tr("rem_cat_chem"), chemicalText, "UN FAO & KALRO")
     )
 
     /** Live KAMIS honey price architecture — official commodity markers. */
@@ -206,14 +215,14 @@ object MarketDataRepository {
         cropName.trim().lowercase().contains("honey")
 
     fun getHoneyProfile(): KamisHoneyProfile = KamisHoneyProfile(
-        commodityName = "🐝 Pure Natural Honey",
-        baseIndexAverage = "KES 970.00 / Kilogram",
-        trajectoryVector = "📈 +4.3% (+KES 40.00) Rising Trend",
-        wholesaleBulkingLead = "Wholesale Bulking:",
-        wholesaleBulkingValue = "KES 700.00 / Kg (20L/25L Bulk Containers)",
-        productionCorridorsLead = "Renowned Production Corridors:",
-        productionCorridorsValue = "KES 750.00 – KES 850.00 / 1Kg Jar (Baringo Koriema Packers & Makueni Acacia metrics)",
-        sourceFootnote = "*Sourced from the official Kenya Agricultural Market Information System (KAMIS) Regional Portal.*"
+        commodityName = tr("honey_name"),
+        baseIndexAverage = tr("honey_base_val"),
+        trajectoryVector = tr("honey_traj_val"),
+        wholesaleBulkingLead = tr("honey_bulk_lead"),
+        wholesaleBulkingValue = tr("honey_bulk_val"),
+        productionCorridorsLead = tr("honey_corr_lead"),
+        productionCorridorsValue = tr("honey_corr_val"),
+        sourceFootnote = tr("honey_footnote")
     )
 
     /** Validated pest mapping per crop (CABI / icipe / FAO / KALRO grounded). */
@@ -221,6 +230,7 @@ object MarketDataRepository {
             "mango" -> groundedProfile(
                 pestName = "Mango Fruit Fly (Bactrocera dorsalis)",
                 cropScope = "Mango",
+                profileKey = "mango",
                 culturalText = "Hang methyl eugenol pheromone traps at canopy level (10 per acre). Collect and bury fallen fruits 2 feet deep or seal in black plastic bags under sun to suffocate larvae. Handpick and crush visible egg masses twice a week to disrupt lifecycle progression.",
                 ecologicalText = "Implement the Push-Pull methodology by intercropping with Desmodium to repel moths naturally. Keep orchard floor clean and conserve weaver ants as natural fruit-fly predators.",
                 chemicalText = "If infestation tracking exceeds a strict 20% plot threshold, apply registered spot-treatments like Emamectin Benzoate directly into the crop whorl. Do not spray heavily near harvest."
@@ -228,6 +238,7 @@ object MarketDataRepository {
             "beans", "bean" -> groundedProfile(
                 pestName = "Bean Fly (Ophiomyia phaseoli) / Black Bean Aphid",
                 cropScope = "Beans",
+                profileKey = "beans",
                 culturalText = "Earth up soil around stems during weeding to grow adventitious roots. Handpick and crush visible egg masses twice a week to disrupt lifecycle progression.",
                 ecologicalText = "Implement the Push-Pull methodology by intercropping with Desmodium to repel moths naturally. Spray neem seed kernel extract or potassium-soap early morning before bees are active.",
                 chemicalText = "If infestation tracking exceeds a strict 20% plot threshold, apply registered spot-treatments like Emamectin Benzoate directly into the crop whorl."
@@ -235,6 +246,7 @@ object MarketDataRepository {
             "maize" -> groundedProfile(
                 pestName = "Fall Armyworm (Spodoptera frugiperda)",
                 cropScope = "Maize",
+                profileKey = "maize",
                 culturalText = "Handpick and crush visible egg masses twice a week to disrupt lifecycle progression. Scout whorls twice weekly and crush caterpillars directly in the funnel.",
                 ecologicalText = "Implement the Push-Pull methodology by intercropping with Desmodium to repel moths naturally. Plant Napier/Brachiaria trap borders to cut pressure over 70%.",
                 chemicalText = "If infestation tracking exceeds a strict 20% plot threshold, apply registered spot-treatments like Emamectin Benzoate directly into the crop whorl. Alternate chemical classes to block resistance."
@@ -329,31 +341,36 @@ object MarketDataRepository {
     /** Farmer-facing market verdicts (app core: market trends & analysis). */
     fun marketVerdict(record: CropMarketRecord): String {
         if (isHoneyCrop(record.cropName)) {
-            return "RISING TREND — 📈 +4.3% (+KES 40.00) (KAMIS honey index)"
+            return tr("verdict_honey")
         }
         val marginPct = if (record.localPriceKes > 0) (record.netMarginKes * 100) / record.localPriceKes else 0
         val signal = when {
-            marginPct >= 15 -> "STRONG SELL — wide margin, move fast"
-            marginPct >= 8 -> "FAIR TRADE — worth the trip after costs"
-            marginPct >= 0 -> "THIN MARGIN — bulk up or wait"
-            else -> "HOLD — corridor loss after transit"
+            marginPct >= 15 -> tr("verdict_strong")
+            marginPct >= 8 -> tr("verdict_fair")
+            marginPct >= 0 -> tr("verdict_thin")
+            else -> tr("verdict_hold")
         }
-        return "$signal (${if (marginPct >= 0) "+" else ""}$marginPct%)"
+        return trf("verdict_fmt", signal, if (marginPct >= 0) "+" else "", marginPct)
     }
 
     fun bestArbitrage(data: List<CropMarketRecord>): CropMarketRecord? =
         data.maxByOrNull { it.netMarginKes }
 
     fun marketOutlook(countyLabel: String, data: List<CropMarketRecord>): String {
-        if (data.isEmpty()) return "Select a county to unlock live corridor margins, best-crop ranking, and sell/hold signals."
+        if (data.isEmpty()) return tr("out_empty")
         val best = bestArbitrage(data)
         val totalMargin = data.sumOf { it.netMarginKes }
         val avg = totalMargin / data.size
-        return "Corridor pulse for ${countyLabel.ifBlank { "your county" }}: ${data.size} crops tracked. " +
-            "Best margin: ${best?.cropName} (+KES ${best?.netMarginKes} net). " +
-            "Average net across crops: ${if (avg >= 0) "+" else ""}KES $avg/bag after KES 350 transit. " +
-            (if (avg >= 500) "Market favors sellers — aggregate and transport this week."
-            else "Market is tight — sell only the top-ranked crop or bulk with neighbours.")
+        return trf(
+            "out_main",
+            countyLabel.ifBlank { tr("out_your_county") },
+            data.size,
+            best?.cropName,
+            best?.netMarginKes,
+            if (avg >= 0) "+" else "",
+            avg,
+            if (avg >= 500) tr("out_good") else tr("out_tight")
+        )
     }
 
     private const val MOISTURE_CEILING = "13.5% safe harvest moisture ceiling (KALRO). Dry grain to ≤13.5% before bagging to prevent aflatoxin/mould."
@@ -362,28 +379,32 @@ object MarketDataRepository {
         landPrep = "KALRO Land Prep (Maize): Deep plough 20-25cm at onset of rains, harrow to fine tilth. Apply 10t/ha well-decomposed manure + 60kg DAP/ha at planting.",
         plantingSpacing = "Planting Spacing (Maize): 75cm x 25cm, 1 seed per hole (approx. 53,000 plants/ha). Thin to 1 vigorous seedling.",
         moistureCeiling = MOISTURE_CEILING,
-        harvestNote = "Harvest when husks turn brown and kernels are hard. Shell and dry on tarpaulin to 13.5% moisture before storage in hermetic bags."
+        harvestNote = "Harvest when husks turn brown and kernels are hard. Shell and dry on tarpaulin to 13.5% moisture before storage in hermetic bags.",
+        key = "maize"
     )
 
     private val beansAdvisory = AgronomicAdvisory(
         landPrep = "KALRO Land Prep (Beans): Plough 15-20cm, fine firm seedbed. Inoculate seed with rhizobium. Apply 40kg TSP/ha at planting; avoid excess nitrogen.",
         plantingSpacing = "Planting Spacing (Beans): 45cm x 10cm, 1 seed per hole (approx. 220,000 plants/ha). Plant 3-5cm deep.",
         moistureCeiling = MOISTURE_CEILING,
-        harvestNote = "Harvest when 90% pods are dry/yellow. Thresh promptly and dry beans to 13.5% moisture ceiling before bagging."
+        harvestNote = "Harvest when 90% pods are dry/yellow. Thresh promptly and dry beans to 13.5% moisture ceiling before bagging.",
+        key = "beans"
     )
 
     private val onionsAdvisory = AgronomicAdvisory(
         landPrep = "KALRO Land Prep (Onions): Raise nursery bed 1m wide, well-drained loam pH 6.0-7.0. Transplant 6-8 week seedlings to deeply ploughed (20cm), level field with 8t/ha manure.",
         plantingSpacing = "Planting Spacing (Onions): 30cm x 10cm in field (approx. 330,000 plants/ha). Mulch and irrigate lightly twice weekly.",
         moistureCeiling = MOISTURE_CEILING,
-        harvestNote = "Harvest when 70% tops fall over. Cure bulbs 7-10 days in shade to outer-scale dryness (equivalent to ≤13.5% seed/grain handling standard) before grading."
+        harvestNote = "Harvest when 70% tops fall over. Cure bulbs 7-10 days in shade to outer-scale dryness (equivalent to ≤13.5% seed/grain handling standard) before grading.",
+        key = "onions"
     )
 
     private val sorghumAdvisory = AgronomicAdvisory(
         landPrep = "KALRO Land Prep (Sorghum): Minimum tillage / plough 15-20cm. Drought-tolerant; apply 40kg CAN/ha as top-dress at knee-height. Control striga by rotation with legumes.",
         plantingSpacing = "Planting Spacing (Sorghum): 75cm x 20cm, 2 seeds per hole thinned to 1 (approx. 66,000 plants/ha).",
         moistureCeiling = MOISTURE_CEILING,
-        harvestNote = "Harvest panicles when grain is hard and <13.5% moisture. Thresh, winnow and dry further to 13.5% ceiling for safe storage."
+        harvestNote = "Harvest panicles when grain is hard and <13.5% moisture. Thresh, winnow and dry further to 13.5% ceiling for safe storage.",
+        key = "sorghum"
     )
 
     /** All 47 Kenyan counties in constitutional order (1-47). */
@@ -544,21 +565,22 @@ object MarketDataRepository {
             landPrep = "KALRO Land Prep ($canonical): Prepare a deep, well-drained seedbed at onset of rains. Apply well-decomposed manure + basal fertilizer per soil test.",
             plantingSpacing = "Planting Spacing ($canonical): Space for full canopy airflow per KALRO row guide; mulch to hold moisture.",
             moistureCeiling = MOISTURE_CEILING,
-            harvestNote = "Harvest $canonical at full maturity and dry/cure to the 13.5% safe handling ceiling before storage or sale."
+            harvestNote = "Harvest $canonical at full maturity and dry/cure to the 13.5% safe handling ceiling before storage or sale.",
+            key = canonical
         )
         return CropMarketRecord(canonical, unit = unitForCrop(canonical), localPriceKes = local, hubPriceKes = hub, advisory = advisory)
     }
 
     fun getTransportSummary(countyLabel: String): String {
         if (countyLabel.isBlank()) {
-            return "3 Transporters near Marigat available for transit to Nairobi Hub"
+            return tr("trans_empty")
         }
         val key = normalizeCounty(countyLabel)
         val town = countyTowns[key] ?: "$key Town"
         val seed = abs(key.hashCode())
         val count = 2 + (seed % 5)
         val rate = 1800 + (seed % 2500)
-        return "$count Transporters near $town available for transit to Nairobi Hub from KES $rate/ton"
+        return trf("trans_fmt", count, town, rate)
     }
 
     /**
@@ -590,9 +612,9 @@ object MarketDataRepository {
         val key = normalizeCounty(countyLabel.ifBlank { "Baringo" })
         val seed = abs(key.hashCode())
         return listOf(
-            InputPrice("Maize Seed (2kg)", 1150 + (seed % 450), "2kg pack", if ((seed / 3) % 2 == 0) "▲ +2.1%" else "▼ -1.4%"),
-            InputPrice("DAP Fertilizer (50kg)", 5800 + (seed % 900), "50kg bag", if ((seed / 5) % 2 == 0) "▲ +1.2%" else "▼ -0.8%"),
-            InputPrice("CAN Top-dress (50kg)", 4600 + (seed % 700), "50kg bag", if ((seed / 7) % 2 == 0) "▲ +0.9%" else "▼ -0.5%")
+            InputPrice(tr("input_maize"), 1150 + (seed % 450), tr("unit_pack2kg"), if ((seed / 3) % 2 == 0) "▲ +2.1%" else "▼ -1.4%"),
+            InputPrice(tr("input_dap"), 5800 + (seed % 900), tr("unit_bag50kg"), if ((seed / 5) % 2 == 0) "▲ +1.2%" else "▼ -0.8%"),
+            InputPrice(tr("input_can"), 4600 + (seed % 700), tr("unit_bag50kg"), if ((seed / 7) % 2 == 0) "▲ +0.9%" else "▼ -0.5%")
         )
     }
 }

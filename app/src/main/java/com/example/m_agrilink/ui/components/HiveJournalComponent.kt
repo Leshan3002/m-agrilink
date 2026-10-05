@@ -25,6 +25,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.m_agrilink.ui.str
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -167,7 +168,7 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "🐝 KALRO ABIRI Hive Journal",
+                    text = str("hive_title"),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = HoneyInk
@@ -190,16 +191,14 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
 
             // 1. Yield Analytics Cards Row
             Text(
-                text = "📊 Projected Yield Metrics (Modern Langstroth / KTB Hives)",
+                text = str("hive_yield_h"),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = HoneyGold,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
-                text = "• Target Yield: 24kg to 30kg of raw honey per hive, harvested twice annually.\n" +
-                    "• Subsidized Hive Investment: KES 2,500 standard unit entry cost.\n" +
-                    "• Profit Profile: 10 active hives yield approx. KES 144,000 per season.",
+                text = str("hive_yield_1") + "\n" + str("hive_yield_2") + "\n" + str("hive_yield_3"),
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
                 color = HoneyInk
@@ -209,15 +208,14 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
 
             // 2. Honey Forage Cycles & PASTURE MANAGEMENT
             Text(
-                text = "🌱 Regional Honey Forage & Floral Calendar",
+                text = str("hive_forage_h"),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = HoneyGold,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
-                text = "• Forage Cover: Acacia and multi-flower shrub preservation in ASAL corridors.\n" +
-                    "• Climate Shield: Maintain internal hive temperature under extreme drought to prevent absconding or colony migration.",
+                text = str("hive_forage_1") + "\n" + str("hive_forage_2"),
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
                 color = HoneyInk
@@ -227,7 +225,7 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
 
             // 3. Dynamic Public Imagery Row
             Text(
-                text = "📸 Apiary Reference Gallery",
+                text = str("hive_gallery_h"),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = HoneyGold,
@@ -268,7 +266,7 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
 
             // Footer Footnote
             Text(
-                text = "*Sourced via KALRO Apiculture Value Chain, Climate-Smart TIMPs Manual 2020.*",
+                text = str("hive_footnote"),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Light,
                 color = HoneyInk.copy(alpha = 0.7f)

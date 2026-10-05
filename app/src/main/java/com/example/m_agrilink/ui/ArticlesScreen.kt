@@ -53,7 +53,7 @@ fun ArticlesPage(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1E))
         ) {
-            Text("← Back to Home Dashboard", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(str("back_home"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
         Spacer(modifier = Modifier.height(12.dp))
         Box(
@@ -74,7 +74,7 @@ fun ArticlesPage(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "📰 AgriTech & Agriculture News",
+                        str("art_hero"),
                         color = Color.White,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -87,7 +87,7 @@ fun ArticlesPage(
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                if (feedSource == "LIVE") "📡 LIVE" else "📦 OFFLINE PICKS",
+                                if (feedSource == "LIVE") str("art_live") else str("art_offline"),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.Black
@@ -97,7 +97,7 @@ fun ArticlesPage(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "Top & trending stories for Kenyan farmers.",
+                    str("art_sub"),
                     color = Color(0xFFDCE6F5),
                     fontSize = 12.sp
                 )
@@ -106,7 +106,7 @@ fun ArticlesPage(
                     onClick = { refreshKey++ },
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("↻ Refresh stories", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(str("art_refresh"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
@@ -123,7 +123,7 @@ fun ArticlesPage(
                     color = Color(0xFF2E7D32)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
-                Text("Fetching top agritech stories…", fontSize = 13.sp, color = cardMuted)
+                Text(str("art_loading"), fontSize = 13.sp, color = cardMuted)
             }
         } else {
             (articles ?: emptyList()).forEachIndexed { index, article ->
@@ -157,7 +157,7 @@ fun ArticlesPage(
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
                             ) {
-                                Text("📖 Read story", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(str("art_read"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                             OutlinedButton(
                                 onClick = {
@@ -169,7 +169,7 @@ fun ArticlesPage(
                                 modifier = Modifier.weight(1f).height(44.dp),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("▶️ Video", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB71C1C))
+                                Text(str("art_video"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB71C1C))
                             }
                         }
                     }
@@ -177,7 +177,7 @@ fun ArticlesPage(
                 Spacer(modifier = Modifier.height(10.dp))
             }
             Text(
-                "Sources: Google News RSS (live) • FAO / icipe / CABI / KALRO (offline picks).",
+                str("art_sources"),
                 fontSize = 10.sp,
                 color = Color.Gray,
                 modifier = Modifier.padding(start = 4.dp)
