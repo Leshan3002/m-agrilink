@@ -137,6 +137,7 @@ fun WeatherTerminalScreen(
     var liveTemp by remember { mutableStateOf<Double?>(null) }
     var liveHumidity by remember { mutableStateOf<Int?>(null) }
     var liveWind by remember { mutableStateOf<Double?>(null) }
+    var liveWeatherCode by remember { mutableStateOf<Int?>(null) }
     var liveLoading by remember { mutableStateOf(false) }
     var liveError by remember { mutableStateOf<String?>(null) }
     var liveForecast by remember { mutableStateOf<List<ForecastDay>?>(null) }
@@ -187,10 +188,14 @@ fun WeatherTerminalScreen(
                 val hums = res.hourly.relativehumidity_2m
                 val nowT = res.current_weather?.temperature ?: temps.firstOrNull()
                 val nowW = res.current_weather?.windspeed
+                // WMO weathercode parsed off the main thread with the rest of
+                // the payload (M-AgriLink rain-guard, developer: Levis Lekesio).
+                val nowCode = res.current_weather?.weathercode
                 withContext(Dispatchers.Main) {
                     if (nowT != null) liveTemp = nowT
                     liveHumidity = hums.firstOrNull()
                     if (nowW != null) liveWind = nowW
+                    liveWeatherCode = nowCode
                     // Derive a 7-day strip from the hourly arrays (24h steps).
                     try {
                         val days = listOf("Today", "+1d", "+2d", "+3d", "+4d", "+5d", "+6d")
@@ -480,6 +485,12 @@ fun WeatherTerminalScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+                // WMO rain-guard: current_weather.weathercode decides, never the
+                // hourly PoP string. Rain codes 51/53/55/61/63/65/80/81/82 force
+                // the rainfall badge + KALRO washout advisory below.
+                // Engineered under developer profile: Levis Lekesio.
+                val isActiveRainfall = (liveWeatherCode ?: -1) in
+                    setOf(51, 53, 55, 61, 63, 65, 80, 81, 82)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -487,10 +498,15 @@ fun WeatherTerminalScreen(
                         .padding(10.dp)
                 ) {
                     Text(
-                        "🌱 Weather Advisory: High ambient humidity detected across $effectivePlace. Ideal morning window open for protective anti-fungal treatments before wind speed accelerates.",
+                        if (isActiveRainfall) {
+                            str("wx_rain_badge") + "\n\n" + str("wx_rain_advisory")
+                        } else {
+                            "🌱 Weather Advisory: High ambient humidity detected across $effectivePlace. Ideal morning window open for protective anti-fungal treatments before wind speed accelerates."
+                        },
                         color = Color.White,
                         fontSize = 13.sp,
-                        lineHeight = 18.sp
+                        lineHeight = 18.sp,
+                        fontWeight = if (isActiveRainfall) FontWeight.Bold else FontWeight.Normal
                     )
                 }
                 if (!hasFineLocation || !gpsEnabled) {
