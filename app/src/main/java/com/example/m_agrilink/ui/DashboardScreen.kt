@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShowChart
@@ -231,33 +232,50 @@ private fun speakOverviewSegments(
         tts.stop()
     } catch (e: Exception) {
     }
-    val cropName = overviewCropName(plantedCrop, liveDiagnosis)
-    val pestName = overviewPestName(plantedCrop, liveDiagnosis)
+    // M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+    // Voice follows the Language picker: Kiswahili mode speaks Swahili (sw-KE when
+    // the engine has it, else generic Swahili), English mode speaks US English.
+    try {
+        val voiceLocale = if (AppLocale.isSwahili) {
+            val swKe = Locale("sw", "KE")
+            if (tts.isLanguageAvailable(swKe) >= TextToSpeech.LANG_AVAILABLE) swKe
+            else {
+                val sw = Locale("sw")
+                if (tts.isLanguageAvailable(sw) >= TextToSpeech.LANG_AVAILABLE) sw else Locale.US
+            }
+        } else {
+            Locale.US
+        }
+        tts.language = voiceLocale
+    } catch (e: Exception) {
+    }
+    // Strip pictographs/bullets so the engine reads words, not emoji names.
+    fun speakable(s: String): String =
+        s.replace(Regex("[\\p{So}\\p{Sk}•●▲▼★☆→➔*]+"), " ").replace(Regex("\\s+"), " ").trim()
     val segments = mutableListOf<String>()
     segments.add(ADVISORY_FRAMEWORK_ATTRIBUTION + " Shamba AI developed by Levis Lekesio.")
+    // Speak exactly what the advisory card shows (already localized via tr()).
+    segments.add(cropDiagnosticTitle(plantedCrop, liveDiagnosis, confidencePct, source))
     if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
-        segments.add("Identification. Your $cropName looks healthy. Confidence $confidencePct percent via $source.")
-        segments.add("Preventive care. Keep scouting twice weekly, clear weeds and debris, mulch to hold moisture, and watch leaf edges after humid nights.")
+        segments.add(tr("body_preventive"))
     } else {
-        segments.add("Identification. Your crop is facing an active infestation of $pestName on $cropName. Confidence $confidencePct percent via $source.")
-        segments.add("Immediate control and management.")
         overviewControlBullets().forEach { (lead, rest) ->
             segments.add("$lead $rest")
         }
         val extra = if (cropScanKey(plantedCrop).isBlank()) emptyList()
-        else cropDiagnosticBody(plantedCrop).map { it.replace(Regex("^[\\p{So}\\s]+"), "") }
+        else cropDiagnosticBody(plantedCrop)
         segments.addAll(extra)
     }
-    segments.add("Let's optimize. Are you growing these crops in a small home garden plot or a large-scale commercial orchard? Let Shamba A I know so we can suggest tailored systemic organic treatment blends matching your growing scale.")
+    segments.add(overviewCta())
     try {
         val grounded = MarketDataRepository.getPestAdvisory(plantedCrop.ifBlank { liveDiagnosis })
         grounded.cardLines().forEach { line ->
-            segments.add(line.replace(Regex("[💡🌱🧪•]"), "").trim())
+            segments.add(line)
         }
     } catch (e: Exception) {
     }
-    segments.add("Verified via KALRO ASAL Research Databases, CABI Plantwise Knowledge Bank, and icipe Kenya. Spoken by Shamba AI, developed by Levis Lekesio. $ADVISORY_FRAMEWORK_ATTRIBUTION")
-    segments.forEachIndexed { index, part ->
+    segments.add(verifiedSourcesFootnote() + " Spoken by Shamba AI, developed by Levis Lekesio. $ADVISORY_FRAMEWORK_ATTRIBUTION")
+    segments.map(::speakable).filter { it.isNotBlank() }.forEachIndexed { index, part ->
         part.chunked(400).forEach { chunk ->
             try {
                 tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, "overview_$index")
@@ -779,6 +797,176 @@ private fun SaccoInputPlannerWidget(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = catalog.moduleTag,
+                color = Color.Gray,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+/**
+ * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+ *
+ * ServiceMarketplaceHub: independent, non-transactional directory of verified
+ * Baringo County agrovets plus machinery/extension providers. Bound to the
+ * active county picker (Baringo corridor). Rows carrying a listed telephone
+ * contact dial via Intent.ACTION_DIAL only; walk-in shops render display-only.
+ * Zero payment hooks. No fixed heights — safe inside the parent verticalScroll.
+ */
+private data class MarketplaceServiceEntry(
+    val nameKey: String,
+    val detailKey: String,
+    val phone: String? // null = walk-in shop, no call line listed (never invented)
+)
+
+@Composable
+private fun MarketplaceServiceRow(
+    entry: MarketplaceServiceEntry,
+    onDial: (String) -> Unit
+) {
+    val phone = entry.phone
+    val rowModifier = if (phone != null) {
+        Modifier.fillMaxWidth().clickable { onDial(phone) }
+    } else {
+        Modifier.fillMaxWidth()
+    }
+    Row(
+        modifier = rowModifier
+            .background(Color(0xFFF4F6F8), RoundedCornerShape(10.dp))
+            .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(10.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = str(entry.nameKey),
+                color = Color.Black,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 18.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = str(entry.detailKey),
+                color = Color.DarkGray,
+                fontSize = 12.sp,
+                lineHeight = 17.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (phone != null) strf("svc_call", phone) else str("svc_walkin"),
+                color = if (phone != null) Color(0xFF1B5E20) else Color.Gray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+}
+
+@Composable
+private fun ServiceMarketplaceHub(
+    selectedCounty: String,
+    onDial: (String) -> Unit,
+    onOpenMap: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isBaringo = selectedCounty.isBlank() || selectedCounty.equals("Baringo", ignoreCase = true)
+    val directoryCounty = if (isBaringo) "Baringo" else selectedCounty
+    val agrovets = remember {
+        listOf(
+            MarketplaceServiceEntry("svc_v1_name", "svc_v1_detail", "0705065420"),
+            MarketplaceServiceEntry("svc_v2_name", "svc_v2_detail", null),
+            MarketplaceServiceEntry("svc_v3_name", "svc_v3_detail", "0725334671"),
+            MarketplaceServiceEntry("svc_v4_name", "svc_v4_detail", null)
+        )
+    }
+    val fieldServices = remember {
+        listOf(
+            MarketplaceServiceEntry("svc_v5_name", "svc_v5_detail", null),
+            MarketplaceServiceEntry("svc_v6_name", "svc_v6_detail", null)
+        )
+    }
+    Card(
+        modifier = modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(
+                text = str("svc_title"),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2C2C2E)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = strf("svc_sub", directoryCounty),
+                color = Color.DarkGray,
+                fontSize = 13.sp
+            )
+            if (!isBaringo) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = str("svc_outside"),
+                    color = Color(0xFFA75D5D),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 17.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            // Interactive map banner: thumbnail vector + action button into AgrovetMapScreen.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF1C1C1E), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Map,
+                    contentDescription = null,
+                    tint = Color(0xFFE6B325),
+                    modifier = Modifier.size(40.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Button(
+                    onClick = onOpenMap,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
+                ) {
+                    Text(
+                        str("svc_open_map"),
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = str("svc_agrovet_h"),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2C2C2E)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            agrovets.forEach { entry -> MarketplaceServiceRow(entry, onDial) }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = str("svc_services_h"),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2C2C2E)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            fieldServices.forEach { entry -> MarketplaceServiceRow(entry, onDial) }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "M-AgriLink Ecosystem Extension Tracker — Maintained and Structured by Lead Developer Levis Lekesio.",
                 color = Color.Gray,
                 fontSize = 10.sp,
                 lineHeight = 14.sp
@@ -1426,6 +1614,9 @@ fun PremiumMarketAnalyzerScreen() {
     var expanded by remember { mutableStateOf(false) }
     // Session states survive minimize / rotation / process death.
     var selectedCounty by rememberSaveable { mutableStateOf("") }
+    // M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+    // Instant county-hub search filter (survives rotation; drives the 47-county list below).
+    var countySearchQuery by rememberSaveable { mutableStateOf("") }
     val countyData = remember(selectedCounty) {
         MarketDataRepository.getCountyData(selectedCounty)
     }
@@ -1598,6 +1789,11 @@ fun PremiumMarketAnalyzerScreen() {
     }
 
     val counties = MarketDataRepository.getCounties()
+    // Instant filter: matches anywhere in the county name, case-insensitive.
+    val filteredCounties = remember(counties, countySearchQuery) {
+        val q = countySearchQuery.trim()
+        if (q.isEmpty()) counties else counties.filter { it.contains(q, ignoreCase = true) }
+    }
 
     // --- ACCOUNT + LIVE LOOKUP RUNTIME (Room ACID profile, Gemini-first briefs) ---
     val scope = rememberCoroutineScope()
@@ -1751,7 +1947,7 @@ fun PremiumMarketAnalyzerScreen() {
 
     // System back button: step back through scanner -> chat -> market/weather/articles/account pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles") {
+    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" || activeViewport == "agromap") {
         when {
             isScanningForDisease -> {
                 isScanningForDisease = false
@@ -1762,7 +1958,7 @@ fun PremiumMarketAnalyzerScreen() {
                 analyzerAttached = false
             }
             showShambaChat -> showShambaChat = false
-            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" -> activeViewport = "home"
+            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" || activeViewport == "agromap" -> activeViewport = "home"
         }
     }
 
@@ -2084,7 +2280,7 @@ fun PremiumMarketAnalyzerScreen() {
                 title = { Text(str("lang_title"), fontWeight = FontWeight.Bold) },
                 text = {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        listOf("English", "Kiswahili", "Kikuyu", "Kaljin", "Luo").forEach { lang ->
+                        listOf("English", "Kiswahili", "Kikuyu", "Kalenjin", "Luo").forEach { lang ->
                             TextButton(
                                 onClick = {
                                     selectedLanguage = lang
@@ -2102,7 +2298,7 @@ fun PremiumMarketAnalyzerScreen() {
                         }
                     }
                 },
-                confirmButton = { TextButton(onClick = { langExpanded = false }) { Text("Close", color = Color.Gray) } },
+                confirmButton = { TextButton(onClick = { langExpanded = false }) { Text(str("dlg_close"), color = Color.Gray) } },
                 containerColor = Color.White,
                 shape = RoundedCornerShape(16.dp)
             )
@@ -2641,6 +2837,14 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
+            // Fullscreen interactive agrovet locator map (Baringo corridor).
+            if (activeViewport == "agromap") {
+                AgrovetMapScreen(
+                    onBackClick = { activeViewport = "home" },
+                    onDial = { dialPhone(it) }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
             // Dedicated Weather Terminal page (separate from Home page).
             if (activeViewport == "weather") {
                 WeatherTerminalScreen(
@@ -2659,7 +2863,7 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles") {
+            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles" && activeViewport != "agromap") {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
@@ -2669,6 +2873,38 @@ fun PremiumMarketAnalyzerScreen() {
                 color = contentPrimary,
                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
             )
+
+            // M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+            // Interactive county-hub search: typing filters the 47-county list instantly.
+            OutlinedTextField(
+                value = countySearchQuery,
+                onValueChange = {
+                    countySearchQuery = it
+                    expanded = true
+                },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text(str("home_county_search"), color = Color.Gray) },
+                leadingIcon = { Text("🔍", fontSize = 16.sp) },
+                trailingIcon = {
+                    if (countySearchQuery.isNotEmpty()) {
+                        TextButton(onClick = { countySearchQuery = "" }) {
+                            Text("✕", fontSize = 14.sp, color = Color.Gray)
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedBorderColor = Color(0xFFE6B325),
+                    unfocusedBorderColor = Color(0xFFE6B325)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier
@@ -2705,15 +2941,25 @@ fun PremiumMarketAnalyzerScreen() {
                     onDismissRequest = { expanded = false },
                     modifier = Modifier.fillMaxWidth(0.9f).heightIn(max = 400.dp).background(Color.White)
                 ) {
-                    counties.forEach { county ->
-                        DropdownMenuItem(
-                            text = { Text(county, color = Color.Black, fontWeight = FontWeight.Medium) },
-                            onClick = {
-                                selectedCounty = county
-                                expanded = false
-                                scope.launch { accountRepo.updateCounty(county) }
-                            }
+                    if (filteredCounties.isEmpty()) {
+                        Text(
+                            text = strf("home_county_empty", countySearchQuery.trim()),
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(16.dp)
                         )
+                    } else {
+                        filteredCounties.forEach { county ->
+                            DropdownMenuItem(
+                                text = { Text(county, color = Color.Black, fontWeight = FontWeight.Medium) },
+                                onClick = {
+                                    selectedCounty = county
+                                    expanded = false
+                                    countySearchQuery = ""
+                                    scope.launch { accountRepo.updateCounty(county) }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -3109,6 +3355,16 @@ fun PremiumMarketAnalyzerScreen() {
 
             // --- 3-ii. SACCO INPUT PLANNER WIDGET (price grid + acreage calculator) ---
             SaccoInputPlannerWidget(modifier = Modifier.fillMaxWidth())
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- 3-iia. SERVICE MARKETPLACE HUB (Baringo verified directory) ---
+            ServiceMarketplaceHub(
+                selectedCounty = selectedCounty,
+                onDial = { dialPhone(it) },
+                onOpenMap = { activeViewport = "agromap" },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 

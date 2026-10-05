@@ -40,6 +40,9 @@ android {
         fun appProp(name: String, fallback: String) =
             props.getProperty(name)?.takeIf { it.isNotBlank() } ?: fallback
         buildConfigField("String", "OPENWEATHER_API_KEY", appProp("OPENWEATHER_API_KEY", "\"\""))
+        // Google Maps SDK key for AgrovetMapScreen. Add GOOGLE_MAPS_API_KEY="..." to
+        // local.properties (Cloud console key with Maps SDK for Android enabled).
+        manifestPlaceholders["MAPS_API_KEY"] = appProp("GOOGLE_MAPS_API_KEY", "")
     }
 
     buildTypes {
@@ -103,6 +106,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.play.services.location)
+    implementation(libs.play.services.maps)
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
     implementation("org.osmdroid:osmdroid-android:6.1.20")

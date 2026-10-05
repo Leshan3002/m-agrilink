@@ -82,6 +82,11 @@
             android:label="Farm Boundary Profiler"
             android:theme="@style/Theme.MAgriLink" />
 
+        <!-- Google Maps SDK key (injected from local.properties GOOGLE_MAPS_API_KEY). -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
+
     </application>
 
 </manifest>
