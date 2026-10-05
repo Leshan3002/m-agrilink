@@ -560,6 +560,188 @@ private fun HoneyOverviewCard(
 }
 
 /**
+ * Real-Time Lorry & Logistics Tracker: county-bound mock corridor metrics
+ * with tap-to-contact driver action. Dark high-contrast card, no fixed
+ * heights — safe inside the parent verticalScroll.
+ */
+@Composable
+private fun LogisticsTrackerComponent(
+    selectedCounty: String,
+    onContactDriver: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val snapshot = remember(selectedCounty) { MarketDataRepository.getLorrySnapshot(selectedCounty) }
+    val transporters = remember(selectedCounty) { MarketDataRepository.getTransporters(selectedCounty) }
+    val firstPhone = transporters.firstOrNull()?.phone ?: "0722000000"
+    Card(
+        modifier = modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(
+                text = "🚚 Regional Transport & Lorry Logistics",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFE6B325)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = if (selectedCounty.isBlank()) "Select a corridor hub above for tonight's departures."
+                else "Live corridor: ${snapshot.regionLabel} ➔ ${snapshot.hubDestination}",
+                color = Color.LightGray,
+                fontSize = 13.sp
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            snapshot.headlineLines().forEach { line ->
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                    Text(
+                        text = line,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(
+                onClick = { onContactDriver(firstPhone) },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
+            ) {
+                Text("📞 Tap to contact driver", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = snapshot.moduleTag,
+                color = Color.Gray,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+private fun formatKes(amount: Int): String =
+    "KES " + "%,d".format(java.util.Locale.US, amount)
+
+/**
+ * Dynamic SACCO & Input Pricing Planner: certified-input price grid plus an
+ * interactive acreage calculator with instant investment projections.
+ */
+@Composable
+private fun SaccoInputPlannerWidget(
+    modifier: Modifier = Modifier
+) {
+    val catalog = remember { MarketDataRepository.getSaccoCatalog() }
+    var acreageInput by rememberSaveable { mutableStateOf("1.0") }
+    val acreage = acreageInput.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+    val projection = remember(catalog, acreage) { catalog.projection(acreage) }
+    Card(
+        modifier = modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(
+                text = "💰 SACCO Certified Input Planner",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2C2C2E)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Certified wholesale trends — budget before planting, avoid price gouging.",
+                color = Color.DarkGray,
+                fontSize = 13.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            catalog.items.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    row.forEach { item ->
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(Color(0xFFF4F6F8), RoundedCornerShape(10.dp))
+                                .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(10.dp))
+                                .padding(10.dp)
+                        ) {
+                            Text(
+                                text = "• ${item.name}",
+                                color = Color.Black,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 16.sp
+                            )
+                            Text(item.spec, color = Color.Gray, fontSize = 11.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = formatKes(item.priceKes),
+                                color = Color(0xFF1B5E20),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp
+                            )
+                            if (item.badge.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color(0xFFE8F5E9), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Text(item.badge, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+                                }
+                            }
+                        }
+                    }
+                    if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            OutlinedTextField(
+                value = acreageInput,
+                onValueChange = { acreageInput = it.filter { c -> c.isDigit() || c == '.' } },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Estimated acreage", color = Color.Gray) },
+                placeholder = { Text("e.g. 2.5", color = Color.Gray) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Baseline projection for ${if (acreageInput.isBlank()) "0" else acreageInput} acre(s):",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2C2C2E)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("🌱 Seed (${projection.seedPackets} pkts): ${formatKes(projection.seedCostKes)}", fontSize = 13.sp, color = Color.DarkGray)
+            Text("🧪 DAP (${projection.dapBags} bags): ${formatKes(projection.dapCostKes)}", fontSize = 13.sp, color = Color.DarkGray)
+            Text("🌿 Compost (${projection.compostBags} bags): ${formatKes(projection.compostCostKes)}", fontSize = 13.sp, color = Color.DarkGray)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Total investment: ${formatKes(projection.totalKes)}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF1B5E20)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = catalog.moduleTag,
+                color = Color.Gray,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+/**
  * Dedicated Market Overview page (app core: market trends & analysis).
  * Ranks every crop in the corridor with margins, verdicts, and outlook.
  */
@@ -1428,9 +1610,9 @@ fun PremiumMarketAnalyzerScreen() {
         }
     }
 
-    // System back button: step back through scanner -> chat -> market/weather pages
+    // System back button: step back through scanner -> chat -> market/weather/articles/account pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market") {
+    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles") {
         when {
             isScanningForDisease -> {
                 isScanningForDisease = false
@@ -1441,7 +1623,7 @@ fun PremiumMarketAnalyzerScreen() {
                 analyzerAttached = false
             }
             showShambaChat -> showShambaChat = false
-            activeViewport == "weather" || activeViewport == "market" -> activeViewport = "home"
+            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" -> activeViewport = "home"
         }
     }
 
@@ -1609,7 +1791,39 @@ fun PremiumMarketAnalyzerScreen() {
         }
     }
 
-    Scaffold { scaffoldPadding ->
+    Scaffold(
+        bottomBar = {
+            // Mobile-style 3-button bottom navigation: Navigate • Language • Settings.
+            NavigationBar(
+                containerColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color.White
+            ) {
+                NavigationBarItem(
+                    selected = activeViewport == "market" || activeViewport == "weather" || activeViewport == "account",
+                    onClick = { navExpanded = true },
+                    icon = { Text("🌐", fontSize = 20.sp) },
+                    label = { Text("Navigate", fontSize = 11.sp) }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { langExpanded = true },
+                    icon = { Text("🔤", fontSize = 20.sp) },
+                    label = { Text("Language", fontSize = 11.sp) }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { settingsExpanded = true },
+                    icon = { Text("⚙️", fontSize = 20.sp) },
+                    label = { Text("Settings", fontSize = 11.sp) }
+                )
+                NavigationBarItem(
+                    selected = activeViewport == "articles",
+                    onClick = { activeViewport = "articles" },
+                    icon = { Text("📰", fontSize = 20.sp) },
+                    label = { Text("Articles", fontSize = 11.sp) }
+                )
+            }
+        }
+    ) { scaffoldPadding ->
         val canvasBackground = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F6F8)
         // Dark-mode legible text for labels drawn directly on the canvas
         // (cards stay white with dark text, so they are untouched).
@@ -1653,6 +1867,7 @@ fun PremiumMarketAnalyzerScreen() {
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(Color.White)
                                 .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(20.dp))
+                                .clickable { activeViewport = "account" }
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
                             Text(
@@ -1685,147 +1900,134 @@ fun PremiumMarketAnalyzerScreen() {
                     fontSize = 12.sp,
                     color = Color(0xFFF2E6E6)
                 )
-                Spacer(modifier = Modifier.height(14.dp))
-                // Top 3 anchor buttons with nested sub-menus
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        Button(
-                            onClick = { navExpanded = true },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                        ) {
-                            Text("🌐 Navigation", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+        }
+
+        // Bottom-bar dialogs (mobile sheets replacing the old header buttons).
+        if (navExpanded) {
+            AlertDialog(
+                onDismissRequest = { navExpanded = false },
+                title = { Text("🌐 Navigate", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        @Composable fun navOption(label: String, target: String) {
+                            TextButton(
+                                onClick = {
+                                    activeViewport = target
+                                    navExpanded = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    (if (activeViewport == target) "✓ " else "") + label,
+                                    fontSize = 14.sp,
+                                    color = Color.Black,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
-                        DropdownMenu(
-                            expanded = navExpanded,
-                            onDismissRequest = { navExpanded = false },
-                            modifier = Modifier.background(Color.White)
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Go to Home Page Dashboard", color = Color.Black) },
-                                onClick = {
-                                    activeViewport = "home"
-                                    navExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Market Overview", color = Color.Black) },
-                                onClick = {
-                                    activeViewport = "market"
-                                    navExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Weather Terminal", color = Color.Black) },
-                                onClick = {
-                                    activeViewport = "weather"
-                                    navExpanded = false
-                                }
-                            )
-                        }
+                        navOption("🏠 Home Page Dashboard", "home")
+                        navOption("📊 Market Overview", "market")
+                        navOption("🌦 Weather Terminal", "weather")
+                        navOption("📰 AgriTech News & Articles", "articles")
+                        navOption("👨‍🌾 My Account", "account")
                     }
-                    Box(modifier = Modifier.weight(1f)) {
-                        Button(
-                            onClick = { langExpanded = true },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                        ) {
-                            Text("🔤 Language", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                        }
-                        DropdownMenu(
-                            expanded = langExpanded,
-                            onDismissRequest = { langExpanded = false },
-                            modifier = Modifier.background(Color.White)
-                        ) {
-                            listOf("English", "Kiswahili", "Kikuyu", "Kaljin", "Luo").forEach { lang ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            (if (selectedLanguage == lang) "✓ " else "") + lang,
-                                            color = Color.Black
-                                        )
-                                    },
-                                    onClick = {
-                                        selectedLanguage = lang
-                                        langExpanded = false
-                                    }
+                },
+                confirmButton = { TextButton(onClick = { navExpanded = false }) { Text("Close", color = Color.Gray) } },
+                containerColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+        if (langExpanded) {
+            AlertDialog(
+                onDismissRequest = { langExpanded = false },
+                title = { Text("🔤 Language", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        listOf("English", "Kiswahili", "Kikuyu", "Kaljin", "Luo").forEach { lang ->
+                            TextButton(
+                                onClick = {
+                                    selectedLanguage = lang
+                                    langExpanded = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    (if (selectedLanguage == lang) "✓ " else "") + lang,
+                                    fontSize = 14.sp,
+                                    color = Color.Black,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
                     }
-                    Box(modifier = Modifier.weight(1f)) {
-                        Button(
-                            onClick = { settingsExpanded = true },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1E))
-                        ) {
-                            Text("⚙️ System Settings", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                },
+                confirmButton = { TextButton(onClick = { langExpanded = false }) { Text("Close", color = Color.Gray) } },
+                containerColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+        if (settingsExpanded) {
+            AlertDialog(
+                onDismissRequest = { settingsExpanded = false },
+                title = { Text("⚙️ System Settings", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        @Composable fun settingOption(label: String, onTap: () -> Unit) {
+                            TextButton(onClick = onTap, modifier = Modifier.fillMaxWidth()) {
+                                Text(label, fontSize = 14.sp, color = Color.Black, modifier = Modifier.fillMaxWidth())
+                            }
                         }
-                        DropdownMenu(
-                            expanded = settingsExpanded,
-                            onDismissRequest = { settingsExpanded = false },
-                            modifier = Modifier.background(Color.White)
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(if (isDarkTheme) "Toggle Dark Mode Theme (On)" else "Toggle Dark Mode Theme (Off)", color = Color.Black) },
-                                onClick = {
-                                    isDarkTheme = !isDarkTheme
-                                    settingsExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Clear Device Cache", color = Color.Black) },
-                                onClick = {
-                                    liveBrief = null
-                                    briefSource = ""
-                                    cropHistory = listOf()
-                                    cacheNotice = "Device cache cleared."
-                                    settingsExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Accessibility Profiles", color = Color.Black) },
-                                onClick = {
-                                    cacheNotice = "Accessibility profiles: Standard / High-contrast / Large-text ready."
-                                    settingsExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("🍪 Cookie Settings", color = Color.Black) },
-                                onClick = {
-                                    tmpAnalytics = consentState.analytics
-                                    tmpPersonalization = consentState.personalization
-                                    tmpMarketing = consentState.marketing
-                                    showCookieSettings = true
-                                    settingsExpanded = false
-                                }
-                            )
+                        settingOption(if (isDarkTheme) "🌙 Dark Mode: On (tap to turn off)" else "☀️ Dark Mode: Off (tap to turn on)") {
+                            isDarkTheme = !isDarkTheme
+                        }
+                        settingOption("🧹 Clear Device Cache") {
+                            liveBrief = null
+                            briefSource = ""
+                            cropHistory = listOf()
+                            cacheNotice = "Device cache cleared."
+                        }
+                        settingOption("♿ Accessibility Profiles") {
+                            cacheNotice = "Accessibility profiles: Standard / High-contrast / Large-text ready."
+                        }
+                        settingOption("🍪 Cookie Settings") {
+                            tmpAnalytics = consentState.analytics
+                            tmpPersonalization = consentState.personalization
+                            tmpMarketing = consentState.marketing
+                            showCookieSettings = true
+                            settingsExpanded = false
+                        }
+                        if (cacheNotice != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(cacheNotice ?: "", fontSize = 12.sp, color = Color(0xFF1B5E20))
                         }
                     }
-                }
-                if (cacheNotice != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(cacheNotice ?: "", fontSize = 11.sp, color = Color.White)
-                }
-            }
+                },
+                confirmButton = { TextButton(onClick = { settingsExpanded = false }) { Text("Done", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold) } },
+                containerColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            )
         }
 
         Column(modifier = Modifier.padding(16.dp)) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // --- 1B. SERIOUS FARMER ACCOUNT HUB (editable profile + Google + cookies) ---
-            if (accountError != null) {
-                Text(accountError ?: "", fontSize = 12.sp, color = Color(0xFFB71C1C), modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-            }
+            // --- 1B. SERIOUS FARMER ACCOUNT HUB (own page: editable profile + Google + cookies) ---
+            // Account UI lives ONLY on the Account viewport — never on top of Home.
+            if (activeViewport == "account") {
+                Button(
+                    onClick = { activeViewport = "home" },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1E))
+                ) {
+                    Text("← Back to Home Dashboard", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                if (accountError != null) {
+                    Text(accountError ?: "", fontSize = 12.sp, color = Color(0xFFB71C1C), modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+                }
             if (!isUserLoggedIn) {
                 Card(
                     modifier = Modifier
@@ -2045,6 +2247,7 @@ fun PremiumMarketAnalyzerScreen() {
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
+            }
 
             // Cookie consent banner (first launch) + settings sheet.
             if (showCookieBanner) {
@@ -2252,6 +2455,8 @@ fun PremiumMarketAnalyzerScreen() {
                 text = when (activeViewport) {
                     "market" -> "📊 Viewport: Market Overview • $selectedLanguage"
                     "weather" -> "🌦 Viewport: Weather Terminal • $selectedLanguage"
+                    "account" -> "👨‍🌾 Viewport: My Account • $selectedLanguage"
+                    "articles" -> "📰 Viewport: AgriTech News • $selectedLanguage"
                     else -> "🏠 Viewport: Home Dashboard • $selectedLanguage"
                 },
                 fontSize = 12.sp,
@@ -2306,7 +2511,16 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            if (activeViewport != "weather" && activeViewport != "market") {
+            // Top & trending agritech news page (separate from Home page).
+            if (activeViewport == "articles") {
+                ArticlesPage(
+                    isDarkTheme = isDarkTheme,
+                    onBack = { activeViewport = "home" },
+                    onOpenLink = { openWebLink(it) }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles") {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
@@ -2742,6 +2956,20 @@ fun PremiumMarketAnalyzerScreen() {
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- 3-i. LOGISTICS TRACKER COMPONENT (county-bound corridor board) ---
+            LogisticsTrackerComponent(
+                selectedCounty = selectedCounty,
+                onContactDriver = { dialPhone(it) },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- 3-ii. SACCO INPUT PLANNER WIDGET (price grid + acreage calculator) ---
+            SaccoInputPlannerWidget(modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(28.dp))
 

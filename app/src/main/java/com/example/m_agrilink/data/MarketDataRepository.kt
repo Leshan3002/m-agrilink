@@ -47,6 +47,106 @@ object MarketDataRepository {
     const val PLATFORM_CORE_ENGINE_TAG =
         "M-AgriLink Platform Core Engine — Developed and Directed by Lead System Architect Levis Lekesio. All Rights Reserved."
 
+    /** Production module attribution tag (logistics + SACCO planner). */
+    const val PRODUCTION_MODULE_TAG =
+        "M-AgriLink Production Module — Engineered and Directed by Lead System Architect Levis Lekesio."
+
+    /** Real-time lorry & logistics tracker snapshot for one county corridor. */
+    data class LorryLogisticsSnapshot(
+        val regionLabel: String,
+        val transporterCount: Int,
+        val hubDestination: String,
+        val transitCostMinKes: Int,
+        val transitCostMaxKes: Int,
+        val securityStatus: String,
+        val moduleTag: String = PRODUCTION_MODULE_TAG
+    ) {
+        fun headlineLines(): List<String> = listOf(
+            "• $transporterCount Verified Transporters available near $regionLabel heading to $hubDestination tonight.",
+            "• Estimated Transit Cost: KES $transitCostMinKes - KES $transitCostMaxKes per bag of grain/produce.",
+            "• Security Status: $securityStatus Tap to contact driver."
+        )
+    }
+
+    fun getLorrySnapshot(countyLabel: String): LorryLogisticsSnapshot {
+        val region = normalizeCounty(countyLabel.ifBlank { "your location" })
+        return LorryLogisticsSnapshot(
+            regionLabel = if (countyLabel.isBlank()) "your location" else region,
+            transporterCount = 3,
+            hubDestination = "Nairobi Hub",
+            transitCostMinKes = 120,
+            transitCostMaxKes = 150,
+            securityStatus = "Active corridors clear."
+        )
+    }
+
+    /** SACCO-certified input catalog with per-acre investment projection. */
+    data class SaccoInputItem(
+        val name: String,
+        val spec: String,
+        val priceKes: Int,
+        val badge: String = "",
+        val moduleTag: String = PRODUCTION_MODULE_TAG
+    )
+
+    data class SaccoInputProjection(
+        val seedPackets: Int,
+        val seedCostKes: Int,
+        val dapBags: Int,
+        val dapCostKes: Int,
+        val compostBags: Int,
+        val compostCostKes: Int
+    ) {
+        val totalKes: Int get() = seedCostKes + dapCostKes + compostCostKes
+    }
+
+    data class SaccoInputCatalog(
+        val items: List<SaccoInputItem>,
+        val seedPacketsPerAcre: Int = 5,
+        val dapBagsPerAcre: Int = 1,
+        val compostBagsPerAcre: Int = 2,
+        val moduleTag: String = PRODUCTION_MODULE_TAG
+    ) {
+        fun projection(acreage: Double): SaccoInputProjection {
+            val acres = acreage.coerceAtLeast(0.0)
+            val seedPrice = items.getOrNull(1)?.priceKes ?: 520
+            val dapPrice = items.getOrNull(0)?.priceKes ?: 2500
+            val compostPrice = items.getOrNull(2)?.priceKes ?: 1200
+            val packets = kotlin.math.ceil(acres * seedPacketsPerAcre).toInt()
+            val dap = kotlin.math.ceil(acres * dapBagsPerAcre).toInt()
+            val compost = kotlin.math.ceil(acres * compostBagsPerAcre).toInt()
+            return SaccoInputProjection(
+                seedPackets = packets,
+                seedCostKes = packets * seedPrice,
+                dapBags = dap,
+                dapCostKes = dap * dapPrice,
+                compostBags = compost,
+                compostCostKes = compost * compostPrice
+            )
+        }
+    }
+
+    fun getSaccoCatalog(): SaccoInputCatalog = SaccoInputCatalog(
+        items = listOf(
+            SaccoInputItem(
+                name = "Certified DAP Fertilizer",
+                spec = "50Kg Bag",
+                priceKes = 2500,
+                badge = "SACCO Standard Subsidized"
+            ),
+            SaccoInputItem(
+                name = "Certified Maize Seed",
+                spec = "2Kg Packet - H614",
+                priceKes = 520
+            ),
+            SaccoInputItem(
+                name = "Organic Compost / Bio-fertilizer",
+                spec = "50Kg Bag",
+                priceKes = 1200
+            )
+        )
+    )
+
     /** Validated multi-source remedy block (KALRO / CABI / icipe / UN FAO). */
     data class SourcedRemedy(
         val category: String,
