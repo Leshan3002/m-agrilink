@@ -26,6 +26,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -768,6 +773,99 @@ private fun SaccoInputPlannerWidget(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = catalog.moduleTag,
+                color = Color.Gray,
+                fontSize = 10.sp,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+/**
+ * Expandable Frequently Asked Questions: tap a question card to smoothly
+ * reveal its answer. No fixed heights — safe inside the parent verticalScroll.
+ */
+@Composable
+private fun FaqItem(
+    question: String,
+    answer: String,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    Card(
+        onClick = { isExpanded = !isExpanded },
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE6B325))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = question,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2C2C2E),
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = if (isExpanded) "▲" else "▼",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2E7D32),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = answer,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                        color = Color.DarkGray
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FaqSectionComponent(
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(
+                text = str("faq_title"),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2C2C2E)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            FaqItem(question = str("faq_q1"), answer = str("faq_a1"))
+            Spacer(modifier = Modifier.height(8.dp))
+            FaqItem(question = str("faq_q2"), answer = str("faq_a2"))
+            Spacer(modifier = Modifier.height(8.dp))
+            FaqItem(question = str("faq_q3"), answer = str("faq_a3"))
+            Spacer(modifier = Modifier.height(8.dp))
+            FaqItem(question = str("faq_q4"), answer = str("faq_a4"))
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "M-AgriLink Documentation Engine — Managed and Compiled by Lead Developer Levis Lekesio.",
                 color = Color.Gray,
                 fontSize = 10.sp,
                 lineHeight = 14.sp
@@ -3010,6 +3108,11 @@ fun PremiumMarketAnalyzerScreen() {
 
             // --- 3-iii. APICULTURE HIVE JOURNAL (KALRO ABIRI module) ---
             HiveJournalComponent(modifier = Modifier.fillMaxWidth())
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- 3-iv. FREQUENTLY ASKED QUESTIONS (expandable docs) ---
+            FaqSectionComponent(modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(28.dp))
 
