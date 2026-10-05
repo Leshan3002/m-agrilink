@@ -67,6 +67,7 @@ import androidx.camera.view.PreviewView
 import com.example.m_agrilink.data.MarketDataRepository
 import com.example.m_agrilink.data.CropNameNormalizer
 import com.example.m_agrilink.data.TfliteLeafAnalyzer
+import com.example.m_agrilink.ui.components.HiveJournalComponent
 import com.example.m_agrilink.data.local.AgriLinkDatabase
 import com.example.m_agrilink.data.local.CookieConsentManager
 import com.example.m_agrilink.data.local.FarmerProfile
@@ -2970,6 +2971,11 @@ fun PremiumMarketAnalyzerScreen() {
 
             // --- 3-ii. SACCO INPUT PLANNER WIDGET (price grid + acreage calculator) ---
             SaccoInputPlannerWidget(modifier = Modifier.fillMaxWidth())
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- 3-iii. APICULTURE HIVE JOURNAL (KALRO ABIRI module) ---
+            HiveJournalComponent(modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(28.dp))
 
