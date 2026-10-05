@@ -85,6 +85,7 @@ import com.example.m_agrilink.data.local.TransporterProfile
 import com.example.m_agrilink.data.local.UserInterestTracker
 import com.example.m_agrilink.domain.RoomFarmerAccountRepository
 import com.example.m_agrilink.network.CropLiveLookup
+import com.example.m_agrilink.network.MPesaPaymentManager
 import android.accounts.AccountManager
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -605,6 +606,7 @@ private fun HoneyOverviewCard(
 @Composable
 private fun LogisticsTrackerComponent(
     selectedCounty: String,
+    farmerPhone: String,
     onContactDriver: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -612,6 +614,12 @@ private fun LogisticsTrackerComponent(
     val snapshot = remember(selectedCounty, snapshotLang) { MarketDataRepository.getLorrySnapshot(selectedCounty) }
     val transporters = remember(selectedCounty) { MarketDataRepository.getTransporters(selectedCounty) }
     val firstPhone = transporters.firstOrNull()?.phone ?: "0722000000"
+    var bagsInput by rememberSaveable { mutableStateOf("10") }
+    var showPay by remember { mutableStateOf(false) }
+    var payError by remember { mutableStateOf<String?>(null) }
+    val bags = bagsInput.toIntOrNull()?.coerceAtLeast(0) ?: 0
+    val perBagMid = (snapshot.transitCostMinKes + snapshot.transitCostMaxKes) / 2
+    val estimateKes = bags * perBagMid
     Card(
         modifier = modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
@@ -653,6 +661,59 @@ private fun LogisticsTrackerComponent(
             ) {
                 Text(str("logi_contact"), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedTextField(
+                value = bagsInput,
+                onValueChange = { bagsInput = it.filter { c -> c.isDigit() }.take(4) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(str("logi_bags"), color = Color.LightGray) },
+                placeholder = { Text(str("logi_bags_hint"), color = Color.Gray) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF2C2C2E),
+                    unfocusedContainerColor = Color(0xFF2C2C2E),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color(0xFFE6B325),
+                    unfocusedBorderColor = Color.Gray
+                )
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = strf("logi_estimate", formatKes(estimateKes), bags, perBagMid),
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (payError != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(payError ?: "", color = Color(0xFFE57373), fontSize = 12.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    if (MPesaPaymentManager.normalizePhone(farmerPhone) == null || estimateKes < 1) {
+                        payError = tr("pay_badphone")
+                    } else {
+                        payError = null
+                        showPay = true
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+            ) {
+                Text(str("pay_mpesa"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+            if (showPay) {
+                MpesaPayDialog(
+                    amountKes = estimateKes,
+                    phoneRaw = farmerPhone,
+                    accountReference = "TRANSPORT",
+                    onDismiss = { showPay = false }
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = snapshot.moduleTag,
@@ -668,16 +729,105 @@ private fun formatKes(amount: Int): String =
     "KES " + "%,d".format(java.util.Locale.US, amount)
 
 /**
+ * Shared M-Pesa STK Push dialog: progress animation while the gateway call
+ * runs on Dispatchers.IO, then a success/failure verdict. Dismiss is locked
+ * until the outcome arrives so a tap can never fire two pushes.
+ */
+@Composable
+private fun MpesaPayDialog(
+    amountKes: Int,
+    phoneRaw: String,
+    accountReference: String,
+    onDismiss: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var outcome by remember { mutableStateOf<MPesaPaymentManager.StkPushOutcome?>(null) }
+    LaunchedEffect(amountKes, phoneRaw, accountReference) {
+        outcome = null
+        scope.launch(Dispatchers.IO) {
+            val result = MPesaPaymentManager.requestStkPush(phoneRaw, amountKes, accountReference)
+            withContext(Dispatchers.Main) { outcome = result }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = { if (outcome != null) onDismiss() },
+        title = { Text(str("pay_title"), fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                when (val r = outcome) {
+                    null -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFF2E7D32)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(str("pay_sending"), fontSize = 13.sp, color = Color.DarkGray)
+                        }
+                    }
+                    is MPesaPaymentManager.StkPushOutcome.Success -> {
+                        val phone = MPesaPaymentManager.normalizePhone(phoneRaw) ?: phoneRaw
+                        Text(
+                            strf("pay_success", phone, formatKes(amountKes)),
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            color = Color(0xFF1B5E20),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    is MPesaPaymentManager.StkPushOutcome.Failure -> {
+                        val detail = when {
+                            r.reason == "timeout" -> str("pay_err_timeout")
+                            r.reason == "offline" -> str("pay_err_offline")
+                            r.reason.startsWith("auth_http_") || r.reason.startsWith("stk_http_") ->
+                                strf("pay_err_rejected", r.reason)
+                            else -> r.reason
+                        }
+                        Text(
+                            strf("pay_failed", detail),
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            color = Color(0xFFB71C1C)
+                        )
+                    }
+                    MPesaPaymentManager.StkPushOutcome.NotConfigured -> {
+                        Text(str("pay_noconfig"), fontSize = 13.sp, lineHeight = 19.sp, color = Color.DarkGray)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = MPesaPaymentManager.PAYMENT_CORE_TAG,
+                    color = Color.Gray,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = outcome != null, onClick = onDismiss) {
+                Text(str("dlg_close"), color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+/**
  * Dynamic SACCO & Input Pricing Planner: certified-input price grid plus an
  * interactive acreage calculator with instant investment projections.
  */
 @Composable
 private fun SaccoInputPlannerWidget(
+    farmerPhone: String,
     modifier: Modifier = Modifier
 ) {
     val saccoLang = AppLocale.language
     val catalog = remember(saccoLang) { MarketDataRepository.getSaccoCatalog() }
     var acreageInput by rememberSaveable { mutableStateOf("1.0") }
+    var showPay by remember { mutableStateOf(false) }
+    var payError by remember { mutableStateOf<String?>(null) }
     val acreage = acreageInput.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
     val projection = remember(catalog, acreage) { catalog.projection(acreage) }
     Card(
@@ -770,6 +920,34 @@ private fun SaccoInputPlannerWidget(
                 fontWeight = FontWeight.ExtraBold,
                 color = Color(0xFF1B5E20)
             )
+            if (payError != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(payError ?: "", color = Color(0xFFB71C1C), fontSize = 12.sp)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    if (MPesaPaymentManager.normalizePhone(farmerPhone) == null || projection.totalKes < 1) {
+                        payError = tr("pay_badphone")
+                    } else {
+                        payError = null
+                        showPay = true
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+            ) {
+                Text(str("pay_mpesa"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+            if (showPay) {
+                MpesaPayDialog(
+                    amountKes = projection.totalKes,
+                    phoneRaw = farmerPhone,
+                    accountReference = "SACCO-INPUTS",
+                    onDismiss = { showPay = false }
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = catalog.moduleTag,
@@ -3095,6 +3273,7 @@ fun PremiumMarketAnalyzerScreen() {
             // --- 3-i. LOGISTICS TRACKER COMPONENT (county-bound corridor board) ---
             LogisticsTrackerComponent(
                 selectedCounty = selectedCounty,
+                farmerPhone = profilePhone,
                 onContactDriver = { dialPhone(it) },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -3102,7 +3281,7 @@ fun PremiumMarketAnalyzerScreen() {
             Spacer(modifier = Modifier.height(16.dp))
 
             // --- 3-ii. SACCO INPUT PLANNER WIDGET (price grid + acreage calculator) ---
-            SaccoInputPlannerWidget(modifier = Modifier.fillMaxWidth())
+            SaccoInputPlannerWidget(farmerPhone = profilePhone, modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(16.dp))
 

@@ -33,6 +33,20 @@ android {
 
         // 2. Inject the dynamic API key token into your build variables matrix safely
         buildConfigField("String", "GEMINI_API_KEY", apiKey)
+
+        // 3. Daraja (M-Pesa) credentials from local.properties — never committed.
+        // Add to local.properties (values must be quoted Java string literals):
+        // MPESA_CONSUMER_KEY="...", MPESA_CONSUMER_SECRET="...",
+        // MPESA_SHORTCODE="...", MPESA_PASSKEY="...",
+        // MPESA_CALLBACK_URL="https://mydomain.com/callback", MPESA_ENV="sandbox"
+        fun mpesaProp(name: String, fallback: String) =
+            props.getProperty(name)?.takeIf { it.isNotBlank() } ?: fallback
+        buildConfigField("String", "MPESA_CONSUMER_KEY", mpesaProp("MPESA_CONSUMER_KEY", "\"\""))
+        buildConfigField("String", "MPESA_CONSUMER_SECRET", mpesaProp("MPESA_CONSUMER_SECRET", "\"\""))
+        buildConfigField("String", "MPESA_SHORTCODE", mpesaProp("MPESA_SHORTCODE", "\"\""))
+        buildConfigField("String", "MPESA_PASSKEY", mpesaProp("MPESA_PASSKEY", "\"\""))
+        buildConfigField("String", "MPESA_CALLBACK_URL", mpesaProp("MPESA_CALLBACK_URL", "\"https://mydomain.com/callback\""))
+        buildConfigField("String", "MPESA_ENV", mpesaProp("MPESA_ENV", "\"sandbox\""))
     }
 
     buildTypes {
