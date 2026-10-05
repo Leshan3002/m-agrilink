@@ -37,11 +37,15 @@ import java.net.URL
  * Verified via KALRO ABIRI Marigat & World Bank KCSAP Guidelines.
  */
 
-// Swap these for direct image URLs (e.g. https://images.unsplash.com/...) —
-// gallery pages such as https://unsplash.com are not image files and will
-// show the fallback icon until replaced.
-private const val GALLERY_URL_PURE_HONEY = "https://unsplash.com"
-private const val GALLERY_URL_COMB_FRAME = "https://unsplash.com"
+// Verified public honey photos (Wikimedia Commons, hotlink-friendly thumbnails).
+// 1: honey jar with honeycomb — Alabama Extension, CC BY 2.0.
+// 2: honey bees on honeycomb closeup — Healthnutlady, CC BY-SA 3.0.
+private const val GALLERY_URL_PURE_HONEY =
+    "https://commons.wikimedia.org/wiki/Special:FilePath/Small_Honey_Jar_with_Honeycomb_-_51330849013.jpg?width=600"
+private const val GALLERY_URL_COMB_FRAME =
+    "https://commons.wikimedia.org/wiki/Special:FilePath/Western_Honey_Bees_and_Honeycomb_Closeup.JPG?width=600"
+private const val GALLERY_PHOTO_CREDIT =
+    "Photos: Wikimedia Commons (Alabama Extension / Healthnutlady), CC."
 
 private const val GALLERY_MODULE_TAG =
     "M-AgriLink Production Module — Engineered and Directed by Lead System Architect Levis Lekesio."
@@ -117,7 +121,7 @@ private fun NetworkGalleryImage(
         }
     }
     Box(
-        modifier = modifier.background(Color(0xFFE0E0E0)),
+        modifier = modifier.background(Color(0xFFF3E2B8)),
         contentAlignment = Alignment.Center
     ) {
         if (bitmap != null) {
@@ -138,13 +142,22 @@ private fun NetworkGalleryImage(
     }
 }
 
+/**
+ * Honey-themed apiculture card: warm amber surfaces, deep-brown text and
+ * harvest-gold accents matching the honey product line.
+ */
+private val HoneyCardBg = Color(0xFFFFF3D6)
+private val HoneyInk = Color(0xFF4E342E)
+private val HoneyGold = Color(0xFF8A5A00)
+private val HoneyPillBg = Color(0xFFE6B325)
+
 @Composable
 fun HiveJournalComponent(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = HoneyCardBg),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -157,14 +170,20 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                     text = "🐝 KALRO ABIRI Hive Journal",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = HoneyInk
                 )
-                Text(
-                    text = "● Live",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Box(
+                    modifier = Modifier
+                        .background(HoneyPillBg, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "● Live",
+                        fontSize = 12.sp,
+                        color = Color(0xFF1C1C1E),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -174,6 +193,7 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                 text = "📊 Projected Yield Metrics (Modern Langstroth / KTB Hives)",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
+                color = HoneyGold,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
@@ -181,7 +201,8 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                     "• Subsidized Hive Investment: KES 2,500 standard unit entry cost.\n" +
                     "• Profit Profile: 10 active hives yield approx. KES 144,000 per season.",
                 fontSize = 13.sp,
-                lineHeight = 18.sp
+                lineHeight = 18.sp,
+                color = HoneyInk
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -191,13 +212,15 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                 text = "🌱 Regional Honey Forage & Floral Calendar",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
+                color = HoneyGold,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
                 text = "• Forage Cover: Acacia and multi-flower shrub preservation in ASAL corridors.\n" +
                     "• Climate Shield: Maintain internal hive temperature under extreme drought to prevent absconding or colony migration.",
                 fontSize = 13.sp,
-                lineHeight = 18.sp
+                lineHeight = 18.sp,
+                color = HoneyInk
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -207,6 +230,7 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                 text = "📸 Apiary Reference Gallery",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
+                color = HoneyGold,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
@@ -233,6 +257,12 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = GALLERY_PHOTO_CREDIT,
+                fontSize = 10.sp,
+                color = HoneyInk.copy(alpha = 0.6f)
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -241,14 +271,14 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                 text = "*Sourced via KALRO Apiculture Value Chain, Climate-Smart TIMPs Manual 2020.*",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Light,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                color = HoneyInk.copy(alpha = 0.7f)
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = GALLERY_MODULE_TAG,
                 fontSize = 10.sp,
                 lineHeight = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                color = HoneyInk.copy(alpha = 0.6f)
             )
         }
     }
