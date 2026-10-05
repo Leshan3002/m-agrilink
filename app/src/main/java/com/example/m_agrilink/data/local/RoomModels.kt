@@ -50,14 +50,21 @@ data class FarmerProfile(
     val displayName: String = "Guest Farmer",
     val county: String = "Baringo",
     val acreage: Double = 1.0,
-    val authProvider: String = "local", // "local" now, "firebase" later
-    val externalUid: String? = null, // Firebase UID plugs in here later
+    val email: String = "",
+    val phone: String = "",
+    val photoUrl: String? = null,
+    val authProvider: String = "local", // "local" now, "google" after Gmail link
+    val externalUid: String? = null, // Google sub / Firebase UID plugs in here later
+    val cookieChoice: String = "pending", // pending | accepted | custom | declined
+    val consentAnalytics: Boolean = false,
+    val consentPersonalization: Boolean = false,
+    val consentMarketing: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis()
 )
 
 @Entity(
     tableName = "crop_search_history",
-    indices = [Index(value = ["cropName"])]
+    indices = [Index(value = ["cropName"]), Index(value = ["profileId", "timestamp"])]
 )
 data class CropSearchHistory(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

@@ -27,12 +27,22 @@ class AiAssistantViewModel : ViewModel() {
     private var probeStarted = false
 
     companion object {
-        const val BUILDER_BIO = "I was built and engineered by Lead Architect Levis Lekesio — " +
-            "currently based in Marigat. He studied at Maasai Mara College, Narok, " +
-            "and is pretty good at all IT works including Computer Networking, Softwares and Hardwares."
-        const val MASTER_VOICE_TAG =
-            "Voiced by Shamba AI — master creator Levis Lekesio. " +
-            "M-AgriLink Platform Core Engine — Developed and Directed by Lead System Architect Levis Lekesio. All Rights Reserved."
+        const val ASSISTANT_IDENTITY = "I'm Shamba, your M-AgriLink farm assistant, developed by Levis Lekesio."
+        const val ADVISORY_FRAMEWORK_CREDIT =
+            "M-AgriLink Advisory Framework — Directed and Engineered by Lead System Architect Levis Lekesio."
+    }
+
+    /** Search links so the farmer can watch/read more (YouTube + Wikipedia). */
+    private fun learnMoreBlock(inquiry: String): String {
+        val query = inquiry.trim().take(120).ifBlank { "sustainable farming Kenya" }
+        val encoded = try {
+            java.net.URLEncoder.encode(query, "UTF-8")
+        } catch (e: Exception) {
+            query.replace(" ", "+")
+        }
+        return "\n\n✅ Does this fully answer your question? Tell me what is still unclear and I will explain further." +
+            "\n📺 Watch a video guide: https://www.youtube.com/results?search_query=$encoded" +
+            "\n📖 Read more details: https://en.wikipedia.org/wiki/Special:Search?search=$encoded"
     }
 
     private fun isBuilderQuestion(inquiry: String): Boolean {
@@ -88,11 +98,11 @@ class AiAssistantViewModel : ViewModel() {
 
         messages.add(ChatMessage(inquiry, isUser = true))
 
-        // Local builder identity (works online and offline, no network needed).
+        // Local assistant identity (works online and offline, no network needed).
         if (isBuilderQuestion(inquiry)) {
             consecutiveFailures = 0
             engineStatus = EngineStatus.ONLINE
-            messages.add(ChatMessage("👨‍🌾 $BUILDER_BIO 🌱", isUser = false))
+            messages.add(ChatMessage("👨‍🌾 $ASSISTANT_IDENTITY 🌱 $ADVISORY_FRAMEWORK_CREDIT", isUser = false))
             return
         }
 
@@ -122,7 +132,7 @@ class AiAssistantViewModel : ViewModel() {
                     !liveText.isNullOrBlank() -> {
                         consecutiveFailures = 0
                         engineStatus = EngineStatus.ONLINE
-                        messages.add(ChatMessage(liveText, isUser = false))
+                        messages.add(ChatMessage(liveText + learnMoreBlock(inquiry), isUser = false))
                     }
                     authRejected -> messages.add(
                         ChatMessage(
@@ -136,17 +146,17 @@ class AiAssistantViewModel : ViewModel() {
                     )
                     else -> {
                         registerFailureSilent()
-                        messages.add(ChatMessage(offlineExpertBrief(telemetry), isUser = false))
+                        messages.add(ChatMessage(offlineExpertBrief(telemetry) + learnMoreBlock(inquiry), isUser = false))
                     }
                 }
             } catch (e: UnknownHostException) {
                 messages.remove(loadingPlaceholder)
                 registerFailureSilent()
-                messages.add(ChatMessage(offlineExpertBrief(telemetry), isUser = false))
+                messages.add(ChatMessage(offlineExpertBrief(telemetry) + learnMoreBlock(inquiry), isUser = false))
             } catch (e: Exception) {
                 messages.remove(loadingPlaceholder)
                 registerFailureSilent()
-                messages.add(ChatMessage(offlineExpertBrief(telemetry), isUser = false))
+                messages.add(ChatMessage(offlineExpertBrief(telemetry) + learnMoreBlock(inquiry), isUser = false))
             }
         }
     }
@@ -179,7 +189,7 @@ class AiAssistantViewModel : ViewModel() {
     private fun offlineExpertBrief(telemetry: TelemetryContext): String {
         val lastUser = messages.lastOrNull { it.isUser }?.text.orEmpty()
         if (isBuilderQuestion(lastUser)) {
-            return "👨‍🌾 $BUILDER_BIO 🌱"
+            return "👨‍🌾 $ASSISTANT_IDENTITY 🌱 $ADVISORY_FRAMEWORK_CREDIT"
         }
         val crop = telemetry.cropVariety.ifBlank { "Maize" }.trim()
         val county = telemetry.location.ifBlank { "Baringo" }.trim()
@@ -192,20 +202,23 @@ class AiAssistantViewModel : ViewModel() {
             val grounded = MarketDataRepository.getPestAdvisory(record.cropName).cardLines().joinToString(" ")
             return "🤖 Shamba Assistant (Offline Mode): I've detected you are managing " +
                 "${record.cropName} in $county with limited connectivity. " +
+                "🌱 What it is: likely early pest/disease pressure — scout both sides of leaves, stems and buds twice weekly. " +
                 "🚜 Immediate Action: ${record.advisory.plantingSpacing} " +
                 "${record.advisory.landPrep} " +
                 "🌾 Safe Harvesting: ${record.advisory.moistureCeiling} " +
                 "💰 Local market: KES ${record.localPriceKes} → hub KES ${record.hubPriceKes} " +
                 "(net +KES ${record.netMarginKes} per bag). " +
-                "$grounded " +
-                MASTER_VOICE_TAG
+                grounded + " " +
+                "⚠️ Danger signs: spreading spots/holes, wilting, or pests on most plants — call your agrovet immediately. " +
+                "Next season: rotate crops, clear debris, and mulch to prevent repeat attacks."
         }
         return "🤖 Shamba Assistant (Offline Mode): I've detected you are managing a " +
             "$crop orchard in $county with limited connectivity. Based on localized KALRO " +
             "data, your main priority right now is scouting twice weekly for pest vectors, " +
             "hanging monitoring traps at canopy level, and clearing fallen fruits and debris " +
             "to break pest lifecycles. Hold harvested produce under the 13.5% moisture ceiling " +
-            "before storage. Reconnect for a full live brief. 🌱 " +
-            MASTER_VOICE_TAG
+            "before storage. " +
+            "⚠️ If most plants are affected or animals are sick, call a vet/agrovet immediately. " +
+            "Reconnect for a full live brief. 🌱"
     }
 }

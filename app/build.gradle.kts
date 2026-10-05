@@ -74,7 +74,7 @@ dependencies {
     // Core Jetpack Compose UI Platform dependencies
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
-    implementation("androidx.appcompat:appcompat:1.7.0")
+     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
 
     implementation(libs.androidx.compose.material3)

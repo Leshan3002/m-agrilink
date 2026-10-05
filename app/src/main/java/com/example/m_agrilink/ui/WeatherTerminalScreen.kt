@@ -62,6 +62,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import com.example.m_agrilink.OpenMeteoApiService
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -103,6 +108,13 @@ fun WeatherTerminalScreen(
     val fusedClient = remember(context) {
         LocationServices.getFusedLocationProviderClient(context.applicationContext)
     }
+    val openMeteo = remember {
+        Retrofit.Builder()
+            .baseUrl("https://api.open-meteo.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(OpenMeteoApiService::class.java)
+    }
 
     var hasFineLocation by remember {
         mutableStateOf(
@@ -114,47 +126,101 @@ fun WeatherTerminalScreen(
     }
     var showLocationDialog by remember { mutableStateOf(!hasFineLocation) }
     var latLon by remember { mutableStateOf<String?>(null) }
+    var autoLat by remember { mutableStateOf<Double?>(null) }
+    var autoLon by remember { mutableStateOf<Double?>(null) }
     var precisePlace by remember { mutableStateOf<String?>(null) }
+    var detectedCounty by remember { mutableStateOf<String?>(null) }
     var resolvingPlace by remember { mutableStateOf(false) }
+    var locatingNow by remember { mutableStateOf(false) }
     var gpsEnabled by remember { mutableStateOf(true) }
+    // Live Open-Meteo snapshot for the AUTO-detected coordinates.
+    var liveTemp by remember { mutableStateOf<Double?>(null) }
+    var liveHumidity by remember { mutableStateOf<Int?>(null) }
+    var liveWind by remember { mutableStateOf<Double?>(null) }
+    var liveLoading by remember { mutableStateOf(false) }
+    var liveError by remember { mutableStateOf<String?>(null) }
+    var liveForecast by remember { mutableStateOf<List<ForecastDay>?>(null) }
 
     fun resolvePrecisePlace(lat: Double, lon: Double) {
         if (resolvingPlace) return
         resolvingPlace = true
         scope.launch(Dispatchers.IO) {
-            val label = try {
+            var label: String? = null
+            var countyGuess: String? = null
+            try {
                 @Suppress("DEPRECATION")
                 val results = Geocoder(context.applicationContext, Locale.getDefault())
                     .getFromLocation(lat, lon, 1)
                 val a = results?.firstOrNull()
-                if (a == null) {
-                    null
-                } else {
+                if (a != null) {
                     // Prefer street-level detail: subLocality (e.g. Westlands)
                     // + locality/county (e.g. Nairobi).
                     val city = a.locality ?: a.subAdminArea ?: a.adminArea
                     val hood = a.subLocality ?: a.thoroughfare ?: a.featureName
-                    when {
+                    label = when {
                         city != null && hood != null && !hood.equals(city, ignoreCase = true) -> "$city • $hood"
                         city != null -> city
                         hood != null -> hood
                         a.adminArea != null -> a.adminArea
                         else -> null
                     }
+                    countyGuess = a.subAdminArea ?: a.locality ?: a.adminArea
                 }
             } catch (e: Exception) {
-                null
+                label = null
             }
             withContext(Dispatchers.Main) {
                 if (label != null) precisePlace = label
+                if (countyGuess != null) detectedCounty = countyGuess
                 resolvingPlace = false
             }
         }
     }
 
+    fun fetchLiveWx(lat: Double, lon: Double) {
+        scope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { liveLoading = true; liveError = null }
+            try {
+                val res = openMeteo.getLiveForecast(lat, lon)
+                val temps = res.hourly.temperature_2m
+                val rains = res.hourly.precipitation_probability
+                val hums = res.hourly.relativehumidity_2m
+                val nowT = res.current_weather?.temperature ?: temps.firstOrNull()
+                val nowW = res.current_weather?.windspeed
+                withContext(Dispatchers.Main) {
+                    if (nowT != null) liveTemp = nowT
+                    liveHumidity = hums.firstOrNull()
+                    if (nowW != null) liveWind = nowW
+                    // Derive a 7-day strip from the hourly arrays (24h steps).
+                    try {
+                        val days = listOf("Today", "+1d", "+2d", "+3d", "+4d", "+5d", "+6d")
+                        liveForecast = days.mapIndexed { i, name ->
+                            val idx = (i * 24).coerceAtMost(maxOf(0, temps.size - 1))
+                            val maxT = temps.drop(idx).take(24).maxOrNull()?.toInt() ?: 27
+                            val minT = temps.drop(idx).take(24).minOrNull()?.toInt() ?: 18
+                            val rain = rains.getOrNull(idx) ?: 20
+                            val kind = when {
+                                rain >= 40 -> "rain"
+                                maxT >= 28 -> "sun"
+                                else -> "cloud"
+                            }
+                            ForecastDay(name, kind, maxT, minT, rain)
+                        }
+                    } catch (e: Exception) { liveForecast = null }
+                    liveLoading = false
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { liveLoading = false; liveError = "Live sync failed — showing last known pattern." }
+            }
+        }
+    }
+
     fun onGpsFix(lat: Double, lon: Double) {
+        autoLat = lat
+        autoLon = lon
         latLon = String.format(Locale.US, "%.4f, %.4f", lat, lon)
         resolvePrecisePlace(lat, lon)
+        fetchLiveWx(lat, lon)
     }
 
     fun refreshGpsState() {
@@ -163,34 +229,59 @@ fun WeatherTerminalScreen(
             lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
     }
 
+    fun requestFreshFix() {
+        if (locatingNow) return
+        refreshGpsState()
+        try {
+            locatingNow = true
+            // Fresh high-accuracy fix first (real location NOW, not Home input).
+            fusedClient.getCurrentLocation(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                CancellationTokenSource().token
+            ).addOnSuccessListener { loc ->
+                locatingNow = false
+                if (loc != null) {
+                    onGpsFix(loc.latitude, loc.longitude)
+                } else {
+                    // Fallback to last known fix.
+                    try {
+                        fusedClient.lastLocation.addOnSuccessListener { last ->
+                            if (last != null) onGpsFix(last.latitude, last.longitude) else latLon = null
+                        }
+                    } catch (e: SecurityException) { latLon = null }
+                }
+            }.addOnFailureListener {
+                locatingNow = false
+                try {
+                    fusedClient.lastLocation.addOnSuccessListener { last ->
+                        if (last != null) onGpsFix(last.latitude, last.longitude) else latLon = null
+                    }
+                } catch (e: SecurityException) { latLon = null }
+            }
+        } catch (e: SecurityException) {
+            locatingNow = false
+            latLon = null
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasFineLocation = granted
         showLocationDialog = !granted
         if (granted) {
-            refreshGpsState()
-            try {
-                fusedClient.lastLocation.addOnSuccessListener { loc ->
-                    if (loc != null) onGpsFix(loc.latitude, loc.longitude) else latLon = null
-                }
-            } catch (e: SecurityException) {
-                latLon = null
-            }
+            showLocationDialog = false
+            requestFreshFix()
         }
     }
 
+    // AUTO-DETECT on entry: the moment the user opens Weather Terminal we
+    // ignore the Home dashboard county and fix the real GPS location.
     LaunchedEffect(Unit) {
         refreshGpsState()
         if (hasFineLocation) {
             showLocationDialog = false
-            try {
-                fusedClient.lastLocation.addOnSuccessListener { loc ->
-                    if (loc != null) onGpsFix(loc.latitude, loc.longitude) else latLon = null
-                }
-            } catch (e: SecurityException) {
-                latLon = null
-            }
+            requestFreshFix()
         } else {
             showLocationDialog = true
         }
@@ -277,7 +368,7 @@ fun WeatherTerminalScreen(
         label = "wxSunScale"
     )
 
-    val forecast = remember {
+    val fallbackForecast = remember {
         listOf(
             ForecastDay("Monday", "sun", 28, 19, 10),
             ForecastDay("Tuesday", "rain", 26, 19, 40),
@@ -288,7 +379,10 @@ fun WeatherTerminalScreen(
             ForecastDay("Sunday", "cloud", 27, 19, 20)
         )
     }
+    val forecast = liveForecast ?: fallbackForecast
     var selectedDay by remember { mutableStateOf<ForecastDay?>(null) }
+    // Effective place: AUTO-detected GPS first, Home county only as fallback.
+    val effectivePlace = precisePlace ?: detectedCounty ?: county.ifBlank { "Tana River" }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // Dedicated page back navigation (separate from Home).
@@ -335,13 +429,29 @@ fun WeatherTerminalScreen(
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    (precisePlace ?: county.ifBlank { "Tana River" }) +
-                        (if (resolvingPlace) " • locating…" else "") +
-                        (if (latLon != null) " • $latLon" else ""),
+                    (if (autoLat != null) "📍 Auto-detected: " else "📍 Home fallback: ") +
+                        effectivePlace +
+                        (if (resolvingPlace || locatingNow || liveLoading) " • locating…" else "") +
+                        (if (latLon != null) " • $latLon" else "") +
+                        (if (liveForecast != null) " • live" else ""),
                     color = Color(0xFFDCE6F5),
                     fontSize = 12.sp
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = {
+                            if (!hasFineLocation) permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                            else requestFreshFix()
+                        }
+                    ) {
+                        Text(
+                            if (locatingNow || liveLoading) "Locating…" else "↻ Re-detect my location",
+                            color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Filled.WbSunny,
@@ -358,8 +468,15 @@ fun WeatherTerminalScreen(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("24.5°C", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("Humidity 65% • Wind 12 km/h", color = Color(0xFFDCE6F5), fontSize = 12.sp)
+                        Text(
+                            if (liveTemp != null) String.format(Locale.US, "%.1f°C", liveTemp) else "24.5°C",
+                            color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            "Humidity ${liveHumidity?.let { "$it%" } ?: "65%"} • Wind ${liveWind?.let { String.format(Locale.US, "%.0f km/h", it) } ?: "12 km/h"}" +
+                                (if (liveError != null) " • offline pattern" else ""),
+                            color = Color(0xFFDCE6F5), fontSize = 12.sp
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -370,7 +487,7 @@ fun WeatherTerminalScreen(
                         .padding(10.dp)
                 ) {
                     Text(
-                        "🌱 Weather Advisory: High ambient humidity detected across ${precisePlace ?: county.ifBlank { "Tana River" }}. Ideal morning window open for protective anti-fungal treatments before wind speed accelerates.",
+                        "🌱 Weather Advisory: High ambient humidity detected across $effectivePlace. Ideal morning window open for protective anti-fungal treatments before wind speed accelerates.",
                         color = Color.White,
                         fontSize = 13.sp,
                         lineHeight = 18.sp
@@ -542,10 +659,10 @@ fun WeatherTerminalScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text("☔ Rain probability: ${day.rainPct}%", fontSize = 13.sp, color = Color(0xFF1E3A8A))
-                        Text("💧 Humidity: 65% • 💨 Wind: 12 km/h", fontSize = 13.sp, color = Color.DarkGray)
+                        Text("💧 Humidity: ${liveHumidity?.let { "$it%" } ?: "65%"} • 💨 Wind: ${liveWind?.let { String.format(Locale.US, "%.0f km/h", it) } ?: "12 km/h"}", fontSize = 13.sp, color = Color.DarkGray)
                         Text("🌅 Sunrise 06:18 AM • 🌇 Sunset 06:27 PM", fontSize = 13.sp, color = Color.DarkGray)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(dayAdvisory(day, county), fontSize = 13.sp, lineHeight = 19.sp, color = Color.Black)
+                        Text(dayAdvisory(day, effectivePlace), fontSize = 13.sp, lineHeight = 19.sp, color = Color.Black)
                     }
                 },
                 confirmButton = {
