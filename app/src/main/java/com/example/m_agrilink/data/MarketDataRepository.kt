@@ -105,9 +105,26 @@ object MarketDataRepository {
 
     /** Crop-bound input matrix: mango orchard, beans legume, or default maize stream. */
     data class CropInputMatrix(
+        val id: String,
         val cropLabel: String,
         val lines: List<CropInputSpec>
     )
+
+    /** Cached 2026 pricing baselines (Ministry of Agriculture directives). */
+    private val BASELINES_2026: Map<String, Int> = mapOf(
+        "mango_seedling" to 150,
+        "mango_compost_50kg" to 1200,
+        "mango_trap" to 350,
+        "beans_seed_2kg" to 450,
+        "beans_npk_50kg" to 2000,
+        "maize_seed_2kg" to 300,
+        "maize_seed_10kg" to 1500,
+        "maize_dap_50kg" to 2000,
+        "maize_compost_50kg" to 1200
+    )
+
+    private fun priceFor(key: String, overrides: Map<String, Int>): Int =
+        overrides[key]?.takeIf { it > 0 } ?: (BASELINES_2026[key] ?: 0)
 
     /**
      * Dynamic crop seed & fertilizer lookup. The query is the farmer's active
@@ -116,76 +133,88 @@ object MarketDataRepository {
      * certified legume parameters, and everything else holds the default
      * certified H614 maize / subsidized DAP stream.
      */
-    fun getCropInputMatrix(cropQuery: String): CropInputMatrix {
+    fun getCropInputMatrix(
+        cropQuery: String,
+        overrides: Map<String, Int> = emptyMap(),
+        maizeSeedPack: String = "10kg"
+    ): CropInputMatrix {
         val crop = cropQuery.trim().lowercase()
         return when {
             "mango" in crop -> CropInputMatrix(
+                id = "mango",
                 cropLabel = tr("sac_mango_name"),
                 lines = listOf(
                     CropInputSpec(
                         tr("sac_mango_seed_name"), tr("sac_mango_seed_spec"),
-                        unitPriceKes = 150, unitsPerAcre = 100.0, unitLabel = tr("sac_unit_seedling")
+                        unitPriceKes = priceFor("mango_seedling", overrides),
+                        unitsPerAcre = 100.0, unitLabel = tr("sac_unit_seedling")
                     ),
                     CropInputSpec(
                         tr("sac_mango_fert_name"), tr("sac_mango_fert_spec"),
-                        unitPriceKes = 1800, unitsPerAcre = 4.0, unitLabel = tr("sac_unit_bag")
+                        unitPriceKes = priceFor("mango_compost_50kg", overrides),
+                        unitsPerAcre = 4.0, unitLabel = tr("sac_unit_bag")
                     ),
                     CropInputSpec(
                         tr("sac_mango_trap_name"), tr("sac_mango_trap_spec"),
-                        unitPriceKes = 350, unitsPerAcre = 10.0, unitLabel = tr("sac_unit_trap")
+                        unitPriceKes = priceFor("mango_trap", overrides),
+                        unitsPerAcre = 10.0, unitLabel = tr("sac_unit_trap")
                     )
                 )
             )
             "bean" in crop -> CropInputMatrix(
+                id = "beans",
                 cropLabel = tr("sac_beans_name"),
                 lines = listOf(
                     CropInputSpec(
                         tr("sac_beans_seed_name"), tr("sac_beans_seed_spec"),
-                        unitPriceKes = 450, unitsPerAcre = 10.0, unitLabel = tr("sac_unit_packet")
+                        unitPriceKes = priceFor("beans_seed_2kg", overrides),
+                        unitsPerAcre = 10.0, unitLabel = tr("sac_unit_packet")
                     ),
                     CropInputSpec(
                         tr("sac_beans_fert_name"), tr("sac_beans_fert_spec"),
                         badge = tr("sac_item_dap_badge"),
-                        unitPriceKes = 2500, unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
+                        unitPriceKes = priceFor("beans_npk_50kg", overrides),
+                        unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
                     )
                 )
             )
-            crop.isBlank() || "maiz" in crop || "corn" in crop -> CropInputMatrix(
-                cropLabel = tr("sac_maize_name"),
-                lines = listOf(
+            else -> {
+                val seedLine = if (maizeSeedPack == "2kg") {
                     CropInputSpec(
-                        tr("sac_item_seed"), tr("sac_item_seed_spec"),
-                        unitPriceKes = 520, unitsPerAcre = 5.0, unitLabel = tr("sac_unit_packet")
-                    ),
+                        tr("sac_maize_seed2_name"), tr("sac_maize_seed2_spec"),
+                        unitPriceKes = priceFor("maize_seed_2kg", overrides),
+                        unitsPerAcre = 5.0, unitLabel = tr("sac_unit_packet")
+                    )
+                } else {
                     CropInputSpec(
-                        tr("sac_item_dap"), tr("sac_item_dap_spec"),
-                        badge = tr("sac_item_dap_badge"),
-                        unitPriceKes = 2500, unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
-                    ),
-                    CropInputSpec(
-                        tr("sac_item_compost"), tr("sac_item_compost_spec"),
-                        unitPriceKes = 1200, unitsPerAcre = 2.0, unitLabel = tr("sac_unit_bag")
+                        tr("sac_maize_seed10_name"), tr("sac_maize_seed10_spec"),
+                        unitPriceKes = priceFor("maize_seed_10kg", overrides),
+                        unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
+                    )
+                }
+                CropInputMatrix(
+                    id = "maize",
+                    cropLabel = if (crop.isBlank() || "maiz" in crop || "corn" in crop) {
+                        tr("sac_maize_name")
+                    } else {
+                        tr("sac_standard_name")
+                    },
+                    lines = listOf(
+                        seedLine,
+                        CropInputSpec(
+                            tr("sac_item_dap"), tr("sac_item_dap_spec"),
+                            badge = tr("sac_item_dap_badge"),
+                            unitPriceKes = priceFor("maize_dap_50kg", overrides),
+                            unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
+                        ),
+                        CropInputSpec(
+                            tr("sac_item_compost"), tr("sac_item_compost_spec"),
+                            unitPriceKes = priceFor("maize_compost_50kg", overrides),
+                            unitsPerAcre = 2.0, unitLabel = tr("sac_unit_bag")
+                        )
                     )
                 )
-            )
-            else -> CropInputMatrix(
-                cropLabel = tr("sac_standard_name"),
-                lines = listOf(
-                    CropInputSpec(
-                        tr("sac_item_seed"), tr("sac_item_seed_spec"),
-                        unitPriceKes = 520, unitsPerAcre = 5.0, unitLabel = tr("sac_unit_packet")
-                    ),
-                    CropInputSpec(
-                        tr("sac_item_dap"), tr("sac_item_dap_spec"),
-                        badge = tr("sac_item_dap_badge"),
-                        unitPriceKes = 2500, unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
-                    ),
-                    CropInputSpec(
-                        tr("sac_item_compost"), tr("sac_item_compost_spec"),
-                        unitPriceKes = 1200, unitsPerAcre = 2.0, unitLabel = tr("sac_unit_bag")
-                    )
-                )
-            )
+            }
         }
     }
 

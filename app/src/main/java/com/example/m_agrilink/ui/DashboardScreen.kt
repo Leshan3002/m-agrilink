@@ -69,6 +69,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import com.example.m_agrilink.data.MarketDataRepository
+import com.example.m_agrilink.data.SaccoTelemetry
 import com.example.m_agrilink.data.AgronomicAdvisory
 import com.example.m_agrilink.data.AppLocale
 import com.example.m_agrilink.data.CropNameNormalizer
@@ -722,7 +723,20 @@ private fun SaccoInputPlannerWidget(
 ) {
     val saccoLang = AppLocale.language
     val cropKey = plantedCrop.trim().lowercase()
-    val matrix = remember(cropKey, saccoLang) { MarketDataRepository.getCropInputMatrix(cropKey) }
+    var maizePack by rememberSaveable { mutableStateOf("10kg") }
+    // Live national telemetry on a background thread; any failure falls
+    // back to the cached 2026 baselines inside the matrix builder.
+    var livePrices by remember { mutableStateOf<Map<String, Int>?>(null) }
+    LaunchedEffect(saccoLang) {
+        livePrices = withContext(Dispatchers.IO) { SaccoTelemetry.fetchBaselines() }
+    }
+    val matrix = remember(cropKey, saccoLang, livePrices, maizePack) {
+        MarketDataRepository.getCropInputMatrix(
+            cropKey,
+            overrides = livePrices ?: emptyMap(),
+            maizeSeedPack = maizePack
+        )
+    }
     var acreageInput by rememberSaveable { mutableStateOf("1") }
     val acres = acreageInput.toIntOrNull()?.coerceAtLeast(0) ?: 0
     val projection = remember(matrix, acres) {
@@ -758,6 +772,31 @@ private fun SaccoInputPlannerWidget(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(12.dp))
+            if (matrix.id == "maize") {
+                Text(
+                    text = str("sac_maize_pack_label"),
+                    color = Color.DarkGray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = maizePack == "2kg",
+                        onClick = { maizePack = "2kg" },
+                        label = { Text(str("sac_pack_2kg"), fontSize = 12.sp) }
+                    )
+                    FilterChip(
+                        selected = maizePack == "10kg",
+                        onClick = { maizePack = "10kg" },
+                        label = { Text(str("sac_pack_10kg"), fontSize = 12.sp) }
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             matrix.lines.chunked(2).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
