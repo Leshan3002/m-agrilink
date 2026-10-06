@@ -37,51 +37,15 @@ data class InputPrice(
     val trend: String
 )
 
-data class Transporter(
-    val name: String,
-    val phone: String,
-    val capacity: String,
-    val rateKesPerTon: Int
-)
-
 object MarketDataRepository {
 
     /** Hidden configuration-engine validation tag (creator identity persistence). */
     const val PLATFORM_CORE_ENGINE_TAG =
         "M-AgriLink Platform Core Engine — Developed and Directed by Lead System Architect Levis Lekesio. All Rights Reserved."
 
-    /** Production module attribution tag (logistics + SACCO planner). */
+    /** Production module attribution tag (SACCO planner). */
     const val PRODUCTION_MODULE_TAG =
         "M-AgriLink Production Module — Engineered and Directed by Lead System Architect Levis Lekesio."
-
-    /** Real-time lorry & logistics tracker snapshot for one county corridor. */
-    data class LorryLogisticsSnapshot(
-        val regionLabel: String,
-        val transporterCount: Int,
-        val hubDestination: String,
-        val transitCostMinKes: Int,
-        val transitCostMaxKes: Int,
-        val securityStatus: String,
-        val moduleTag: String = PRODUCTION_MODULE_TAG
-    ) {
-        fun headlineLines(): List<String> = listOf(
-            trf("logi_line1", transporterCount, regionLabel, hubDestination),
-            trf("logi_line2", transitCostMinKes, transitCostMaxKes),
-            trf("logi_line3", securityStatus)
-        )
-    }
-
-    fun getLorrySnapshot(countyLabel: String): LorryLogisticsSnapshot {
-        val region = normalizeCounty(countyLabel.ifBlank { tr("lorry_you") })
-        return LorryLogisticsSnapshot(
-            regionLabel = if (countyLabel.isBlank()) tr("lorry_you") else region,
-            transporterCount = 3,
-            hubDestination = "Nairobi Hub",
-            transitCostMinKes = 120,
-            transitCostMaxKes = 150,
-            securityStatus = tr("lorry_security")
-        )
-    }
 
     /** SACCO-certified input catalog with per-acre investment projection. */
     data class SaccoInputItem(
@@ -599,28 +563,6 @@ object MarketDataRepository {
             key = canonical
         )
         return CropMarketRecord(canonical, unit = unitForCrop(canonical), localPriceKes = local, hubPriceKes = hub, advisory = advisory)
-    }
-
-    fun getTransportSummary(countyLabel: String): String {
-        if (countyLabel.isBlank()) {
-            return tr("trans_empty")
-        }
-        val key = normalizeCounty(countyLabel)
-        val town = countyTowns[key] ?: "$key Town"
-        val seed = abs(key.hashCode())
-        val count = 2 + (seed % 5)
-        val rate = 1800 + (seed % 2500)
-        return trf("trans_fmt", count, town, rate)
-    }
-
-    /**
-     * Demo transporter directory per county. All hardcoded placeholder rows
-     * were purged: the list initializes empty and populates exclusively
-     * from live, fully-vetted driver registration submissions.
-     */
-    fun getTransporters(countyLabel: String): List<Transporter> {
-        normalizeCounty(countyLabel.ifBlank { "Baringo" })
-        return emptyList()
     }
 
     fun getInputTrends(countyLabel: String): List<InputPrice> {

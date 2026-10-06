@@ -13,15 +13,13 @@ import net.sqlcipher.database.SupportFactory
  * Offline-first Room database. No payment gateway entities (informational build).
  */
 @Database(
-    entities = [CropAdvisory::class, HydrologicalAlert::class, ExpertForumPost::class, FarmerProfile::class, CropSearchHistory::class, TransporterProfile::class, TransportTask::class],
-    version = 5,
+    entities = [CropAdvisory::class, HydrologicalAlert::class, ExpertForumPost::class, FarmerProfile::class, CropSearchHistory::class],
+    version = 6,
     exportSchema = false
 )
 abstract class AgriLinkDatabase : RoomDatabase() {
 
     abstract fun farmerDao(): FarmerDao
-
-    abstract fun transportDao(): TransportDao
 
     companion object {
         @Volatile
@@ -64,6 +62,14 @@ abstract class AgriLinkDatabase : RoomDatabase() {
             }
         }
 
+        // v6: lorry marketplace + transport task tables removed (feature purge).
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `transport_task`")
+                db.execSQL("DROP TABLE IF EXISTS `transporter_profile`")
+            }
+        }
+
         fun getDatabase(context: Context): AgriLinkDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -75,7 +81,7 @@ abstract class AgriLinkDatabase : RoomDatabase() {
                     "magrilink_database"
                 )
                 .openHelperFactory(SupportFactory(passphrase))
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .fallbackToDestructiveMigration()
                 .build()
