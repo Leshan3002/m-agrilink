@@ -1770,7 +1770,7 @@ private fun MarketOverviewPage(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PremiumMarketAnalyzerScreen() {
+fun DashboardScreen() {
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(false) }
     // Session states survive minimize / rotation / process death.

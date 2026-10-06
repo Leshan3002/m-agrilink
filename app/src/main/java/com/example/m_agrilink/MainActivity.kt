@@ -4,7 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.example.m_agrilink.ui.PremiumMarketAnalyzerScreen
+import com.example.m_agrilink.ui.DashboardScreen
 
 /**
  * M-AgriLink Navigation Engine — Programmed and Configured by Lead System Architect Levis Lekesio.
@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            PremiumMarketAnalyzerScreen()
+            DashboardScreen()
         }
     }
 
