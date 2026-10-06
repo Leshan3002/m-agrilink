@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.LocalShipping
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShowChart
@@ -797,176 +796,6 @@ private fun SaccoInputPlannerWidget(
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = catalog.moduleTag,
-                color = Color.Gray,
-                fontSize = 10.sp,
-                lineHeight = 14.sp
-            )
-        }
-    }
-}
-
-/**
- * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
- *
- * ServiceMarketplaceHub: independent, non-transactional directory of verified
- * Baringo County agrovets plus machinery/extension providers. Bound to the
- * active county picker (Baringo corridor). Rows carrying a listed telephone
- * contact dial via Intent.ACTION_DIAL only; walk-in shops render display-only.
- * Zero payment hooks. No fixed heights — safe inside the parent verticalScroll.
- */
-private data class MarketplaceServiceEntry(
-    val nameKey: String,
-    val detailKey: String,
-    val phone: String? // null = walk-in shop, no call line listed (never invented)
-)
-
-@Composable
-private fun MarketplaceServiceRow(
-    entry: MarketplaceServiceEntry,
-    onDial: (String) -> Unit
-) {
-    val phone = entry.phone
-    val rowModifier = if (phone != null) {
-        Modifier.fillMaxWidth().clickable { onDial(phone) }
-    } else {
-        Modifier.fillMaxWidth()
-    }
-    Row(
-        modifier = rowModifier
-            .background(Color(0xFFF4F6F8), RoundedCornerShape(10.dp))
-            .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(10.dp))
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = str(entry.nameKey),
-                color = Color.Black,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 18.sp
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = str(entry.detailKey),
-                color = Color.DarkGray,
-                fontSize = 12.sp,
-                lineHeight = 17.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = if (phone != null) strf("svc_call", phone) else str("svc_walkin"),
-                color = if (phone != null) Color(0xFF1B5E20) else Color.Gray,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-}
-
-@Composable
-private fun ServiceMarketplaceHub(
-    selectedCounty: String,
-    onDial: (String) -> Unit,
-    onOpenMap: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val isBaringo = selectedCounty.isBlank() || selectedCounty.equals("Baringo", ignoreCase = true)
-    val directoryCounty = if (isBaringo) "Baringo" else selectedCounty
-    val agrovets = remember {
-        listOf(
-            MarketplaceServiceEntry("svc_v1_name", "svc_v1_detail", "0705065420"),
-            MarketplaceServiceEntry("svc_v2_name", "svc_v2_detail", null),
-            MarketplaceServiceEntry("svc_v3_name", "svc_v3_detail", "0725334671"),
-            MarketplaceServiceEntry("svc_v4_name", "svc_v4_detail", null)
-        )
-    }
-    val fieldServices = remember {
-        listOf(
-            MarketplaceServiceEntry("svc_v5_name", "svc_v5_detail", null),
-            MarketplaceServiceEntry("svc_v6_name", "svc_v6_detail", null)
-        )
-    }
-    Card(
-        modifier = modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-            Text(
-                text = str("svc_title"),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C2C2E)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = strf("svc_sub", directoryCounty),
-                color = Color.DarkGray,
-                fontSize = 13.sp
-            )
-            if (!isBaringo) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = str("svc_outside"),
-                    color = Color(0xFFA75D5D),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 17.sp
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            // Interactive map banner: thumbnail vector + action button into AgrovetMapScreen.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF1C1C1E), RoundedCornerShape(12.dp))
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Map,
-                    contentDescription = null,
-                    tint = Color(0xFFE6B325),
-                    modifier = Modifier.size(40.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Button(
-                    onClick = onOpenMap,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
-                ) {
-                    Text(
-                        str("svc_open_map"),
-                        color = Color.Black,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = str("svc_agrovet_h"),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C2C2E)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            agrovets.forEach { entry -> MarketplaceServiceRow(entry, onDial) }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = str("svc_services_h"),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C2C2E)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            fieldServices.forEach { entry -> MarketplaceServiceRow(entry, onDial) }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "M-AgriLink Ecosystem Extension Tracker — Maintained and Structured by Lead Developer Levis Lekesio.",
                 color = Color.Gray,
                 fontSize = 10.sp,
                 lineHeight = 14.sp
@@ -1947,7 +1776,7 @@ fun PremiumMarketAnalyzerScreen() {
 
     // System back button: step back through scanner -> chat -> market/weather/articles/account pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" || activeViewport == "agromap") {
+    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles") {
         when {
             isScanningForDisease -> {
                 isScanningForDisease = false
@@ -1958,7 +1787,7 @@ fun PremiumMarketAnalyzerScreen() {
                 analyzerAttached = false
             }
             showShambaChat -> showShambaChat = false
-            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" || activeViewport == "agromap" -> activeViewport = "home"
+            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" -> activeViewport = "home"
         }
     }
 
@@ -2837,14 +2666,6 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            // Fullscreen interactive agrovet locator map (Baringo corridor).
-            if (activeViewport == "agromap") {
-                AgrovetMapScreen(
-                    onBackClick = { activeViewport = "home" },
-                    onDial = { dialPhone(it) }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
             // Dedicated Weather Terminal page (separate from Home page).
             if (activeViewport == "weather") {
                 WeatherTerminalScreen(
@@ -2863,7 +2684,7 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles" && activeViewport != "agromap") {
+            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles") {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
@@ -3355,16 +3176,6 @@ fun PremiumMarketAnalyzerScreen() {
 
             // --- 3-ii. SACCO INPUT PLANNER WIDGET (price grid + acreage calculator) ---
             SaccoInputPlannerWidget(modifier = Modifier.fillMaxWidth())
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // --- 3-iia. SERVICE MARKETPLACE HUB (Baringo verified directory) ---
-            ServiceMarketplaceHub(
-                selectedCounty = selectedCounty,
-                onDial = { dialPhone(it) },
-                onOpenMap = { activeViewport = "agromap" },
-                modifier = Modifier.fillMaxWidth()
-            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
