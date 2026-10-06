@@ -613,6 +613,10 @@ private fun HoneyOverviewCard(
 private fun formatKes(amount: Int): String =
     "KES " + "%,d".format(java.util.Locale.US, amount)
 
+private fun formatQty(qty: Double): String =
+    if (qty % 1.0 == 0.0) qty.toInt().toString()
+    else "%.1f".format(java.util.Locale.US, qty)
+
 /**
  * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
  *
@@ -622,13 +626,21 @@ private fun formatKes(amount: Int): String =
  */
 @Composable
 private fun SaccoInputPlannerWidget(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    plantedCrop: String = ""
 ) {
     val saccoLang = AppLocale.language
-    val catalog = remember(saccoLang) { MarketDataRepository.getSaccoCatalog() }
-    var acreageInput by rememberSaveable { mutableStateOf("1.0") }
-    val acreage = acreageInput.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
-    val projection = remember(catalog, acreage) { catalog.projection(acreage) }
+    val cropKey = plantedCrop.trim().lowercase()
+    val matrix = remember(cropKey, saccoLang) { MarketDataRepository.getCropInputMatrix(cropKey) }
+    var acreageInput by rememberSaveable { mutableStateOf("1") }
+    val acres = acreageInput.toIntOrNull()?.coerceAtLeast(0) ?: 0
+    val projection = remember(matrix, acres) {
+        matrix.lines.map { line ->
+            val qty = line.unitsPerAcre * acres
+            Triple(line, qty, (qty * line.unitPriceKes).toInt())
+        }
+    }
+    val totalKes = remember(projection) { projection.sumOf { it.third } }
     Card(
         modifier = modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
@@ -647,8 +659,15 @@ private fun SaccoInputPlannerWidget(
                 color = Color.DarkGray,
                 fontSize = 13.sp
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = strf("sac_matrix_for", matrix.cropLabel),
+                color = Color(0xFF1B5E20),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(modifier = Modifier.height(12.dp))
-            catalog.items.chunked(2).forEach { row ->
+            matrix.lines.chunked(2).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -668,10 +687,10 @@ private fun SaccoInputPlannerWidget(
                                 fontWeight = FontWeight.Bold,
                                 lineHeight = 16.sp
                             )
-                            Text(item.spec, color = Color.Gray, fontSize = 11.sp)
+                            Text(item.spec, color = Color.Gray, fontSize = 11.sp, lineHeight = 15.sp)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = formatKes(item.priceKes),
+                                text = formatKes(item.unitPriceKes),
                                 color = Color(0xFF1B5E20),
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 15.sp
@@ -694,7 +713,7 @@ private fun SaccoInputPlannerWidget(
             }
             OutlinedTextField(
                 value = acreageInput,
-                onValueChange = { acreageInput = it.filter { c -> c.isDigit() || c == '.' } },
+                onValueChange = { acreageInput = it.filter { c -> c.isDigit() } },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(str("sac_acre"), color = Color.Gray) },
                 placeholder = { Text(str("sac_acre_hint"), color = Color.Gray) },
@@ -709,19 +728,24 @@ private fun SaccoInputPlannerWidget(
                 color = Color(0xFF2C2C2E)
             )
             Spacer(modifier = Modifier.height(4.dp))
-            Text(strf("sac_seed", projection.seedPackets, formatKes(projection.seedCostKes)), fontSize = 13.sp, color = Color.DarkGray)
-            Text(strf("sac_dap", projection.dapBags, formatKes(projection.dapCostKes)), fontSize = 13.sp, color = Color.DarkGray)
-            Text(strf("sac_compost", projection.compostBags, formatKes(projection.compostCostKes)), fontSize = 13.sp, color = Color.DarkGray)
+            projection.forEach { (line, qty, costKes) ->
+                Text(
+                    text = strf("sac_line_fmt", line.name, formatQty(qty), line.unitLabel, formatKes(costKes)),
+                    fontSize = 13.sp,
+                    color = Color.DarkGray,
+                    lineHeight = 18.sp
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = strf("sac_total", formatKes(projection.totalKes)),
+                text = strf("sac_total", formatKes(totalKes)),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = Color(0xFF1B5E20)
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = catalog.moduleTag,
+                text = MarketDataRepository.PRODUCTION_MODULE_TAG,
                 color = Color.Gray,
                 fontSize = 10.sp,
                 lineHeight = 14.sp
@@ -2995,7 +3019,10 @@ fun PremiumMarketAnalyzerScreen() {
             Spacer(modifier = Modifier.height(16.dp))
 
             // --- 3-ii. SACCO INPUT PLANNER WIDGET (price grid + acreage calculator) ---
-            SaccoInputPlannerWidget(modifier = Modifier.fillMaxWidth())
+            SaccoInputPlannerWidget(
+                modifier = Modifier.fillMaxWidth(),
+                plantedCrop = farmerPlantedCrop
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 

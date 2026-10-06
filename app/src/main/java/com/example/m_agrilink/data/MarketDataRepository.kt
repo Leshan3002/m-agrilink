@@ -93,26 +93,101 @@ object MarketDataRepository {
         }
     }
 
-    fun getSaccoCatalog(): SaccoInputCatalog = SaccoInputCatalog(
-        items = listOf(
-            SaccoInputItem(
-                name = tr("sac_item_dap"),
-                spec = tr("sac_item_dap_spec"),
-                priceKes = 2500,
-                badge = tr("sac_item_dap_badge")
-            ),
-            SaccoInputItem(
-                name = tr("sac_item_seed"),
-                spec = tr("sac_item_seed_spec"),
-                priceKes = 520
-            ),
-            SaccoInputItem(
-                name = tr("sac_item_compost"),
-                spec = tr("sac_item_compost_spec"),
-                priceKes = 1200
-            )
-        )
+    /** Per-acre input line for one crop matrix (price × rate derives the projection). */
+    data class CropInputSpec(
+        val name: String,
+        val spec: String,
+        val badge: String = "",
+        val unitPriceKes: Int,
+        val unitsPerAcre: Double,
+        val unitLabel: String
     )
+
+    /** Crop-bound input matrix: mango orchard, beans legume, or default maize stream. */
+    data class CropInputMatrix(
+        val cropLabel: String,
+        val lines: List<CropInputSpec>
+    )
+
+    /**
+     * Dynamic crop seed & fertilizer lookup. The query is the farmer's active
+     * input (`farmerPlantedCrop.trim().lowercase()`): mango swaps the seasonal
+     * field-crop grid for orchard establishment specs, beans re-routes to
+     * certified legume parameters, and everything else holds the default
+     * certified H614 maize / subsidized DAP stream.
+     */
+    fun getCropInputMatrix(cropQuery: String): CropInputMatrix {
+        val crop = cropQuery.trim().lowercase()
+        return when {
+            "mango" in crop -> CropInputMatrix(
+                cropLabel = tr("sac_mango_name"),
+                lines = listOf(
+                    CropInputSpec(
+                        tr("sac_mango_seed_name"), tr("sac_mango_seed_spec"),
+                        unitPriceKes = 150, unitsPerAcre = 100.0, unitLabel = tr("sac_unit_seedling")
+                    ),
+                    CropInputSpec(
+                        tr("sac_mango_fert_name"), tr("sac_mango_fert_spec"),
+                        unitPriceKes = 1800, unitsPerAcre = 4.0, unitLabel = tr("sac_unit_bag")
+                    ),
+                    CropInputSpec(
+                        tr("sac_mango_trap_name"), tr("sac_mango_trap_spec"),
+                        unitPriceKes = 350, unitsPerAcre = 10.0, unitLabel = tr("sac_unit_trap")
+                    )
+                )
+            )
+            "bean" in crop -> CropInputMatrix(
+                cropLabel = tr("sac_beans_name"),
+                lines = listOf(
+                    CropInputSpec(
+                        tr("sac_beans_seed_name"), tr("sac_beans_seed_spec"),
+                        unitPriceKes = 450, unitsPerAcre = 10.0, unitLabel = tr("sac_unit_packet")
+                    ),
+                    CropInputSpec(
+                        tr("sac_beans_fert_name"), tr("sac_beans_fert_spec"),
+                        badge = tr("sac_item_dap_badge"),
+                        unitPriceKes = 2500, unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
+                    )
+                )
+            )
+            crop.isBlank() || "maiz" in crop || "corn" in crop -> CropInputMatrix(
+                cropLabel = tr("sac_maize_name"),
+                lines = listOf(
+                    CropInputSpec(
+                        tr("sac_item_seed"), tr("sac_item_seed_spec"),
+                        unitPriceKes = 520, unitsPerAcre = 5.0, unitLabel = tr("sac_unit_packet")
+                    ),
+                    CropInputSpec(
+                        tr("sac_item_dap"), tr("sac_item_dap_spec"),
+                        badge = tr("sac_item_dap_badge"),
+                        unitPriceKes = 2500, unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
+                    ),
+                    CropInputSpec(
+                        tr("sac_item_compost"), tr("sac_item_compost_spec"),
+                        unitPriceKes = 1200, unitsPerAcre = 2.0, unitLabel = tr("sac_unit_bag")
+                    )
+                )
+            )
+            else -> CropInputMatrix(
+                cropLabel = tr("sac_standard_name"),
+                lines = listOf(
+                    CropInputSpec(
+                        tr("sac_item_seed"), tr("sac_item_seed_spec"),
+                        unitPriceKes = 520, unitsPerAcre = 5.0, unitLabel = tr("sac_unit_packet")
+                    ),
+                    CropInputSpec(
+                        tr("sac_item_dap"), tr("sac_item_dap_spec"),
+                        badge = tr("sac_item_dap_badge"),
+                        unitPriceKes = 2500, unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
+                    ),
+                    CropInputSpec(
+                        tr("sac_item_compost"), tr("sac_item_compost_spec"),
+                        unitPriceKes = 1200, unitsPerAcre = 2.0, unitLabel = tr("sac_unit_bag")
+                    )
+                )
+            )
+        }
+    }
 
     /** Validated multi-source remedy block (KALRO / CABI / icipe / UN FAO). */
     data class SourcedRemedy(
