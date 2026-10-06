@@ -618,33 +618,57 @@ private fun formatQty(qty: Double): String =
     else "%.1f".format(java.util.Locale.US, qty)
 
 /**
- * PestOutbreakAlertBanner: county-driven regional biosecurity state machine.
- * Baringo flashes amber (Desert Locust), Tana River flashes crimson (Mango
- * Seed Weevil), and all other counties hold the green KALRO MLND seasonal
- * monitor. A soft infinite alpha pulse keeps the capsule eye-catching;
- * vertical-only flow, no fixed heights, zero overlap risk.
+ * PestOutbreakAlertBanner: dual-axis county × crop biosecurity matrix.
+ * Mango × Tana River (CABI weevil) and Maize × Baringo (icipe FAW) flash
+ * crimson; Mango × Baringo (KALRO mildew), Maize × Tana River (MoA MLND)
+ * and Beans × anywhere (KEPHIS bean fly) flash amber; every other pairing
+ * holds the green all-clear with the active crop and county named. A soft
+ * infinite alpha pulse keeps the capsule eye-catching; vertical-only flow,
+ * no fixed heights, zero overlap risk.
  */
 @Composable
-private fun PestOutbreakAlertBanner(selectedCounty: String) {
-    val county = selectedCounty.trim()
+private fun PestOutbreakAlertBanner(
+    selectedCounty: String,
+    plantedCrop: String = ""
+) {
+    val county = selectedCounty.trim().lowercase()
+    val crop = plantedCrop.trim().lowercase()
+    val isTana = "tana river" in county
+    val isBaringo = "baringo" in county
+    val isMango = "mango" in crop
+    val isMaize = "maiz" in crop || "corn" in crop
+    val isBeans = "bean" in crop
+    val crimson = Color(0xFF7F1D1D)
+    val amber = Color(0xFF78350F)
+    val fieldGreen = Color(0xFF064E3B)
     val container: Color
-    val content: Color
-    val messageKey: String
+    val message: String
     when {
-        county.equals("Baringo", ignoreCase = true) -> {
-            container = Color(0xFFFFA000)
-            content = Color.Black
-            messageKey = "pest_baringo"
+        isMango && isTana -> {
+            container = crimson
+            message = str("pest_mango_tana")
         }
-        county.equals("Tana River", ignoreCase = true) -> {
-            container = Color(0xFFDC2626)
-            content = Color.White
-            messageKey = "pest_tana"
+        isMango && isBaringo -> {
+            container = amber
+            message = str("pest_mango_baringo")
+        }
+        isMaize && isBaringo -> {
+            container = crimson
+            message = str("pest_maize_baringo")
+        }
+        isMaize && isTana -> {
+            container = amber
+            message = str("pest_maize_tana")
+        }
+        isBeans -> {
+            container = amber
+            message = str("pest_beans_any")
         }
         else -> {
-            container = Color(0xFFE8F5E9)
-            content = Color(0xFF1B5E20)
-            messageKey = "pest_default"
+            container = fieldGreen
+            val cropLabel = plantedCrop.trim().ifBlank { str("lens_your_crop") }.uppercase()
+            val countyLabel = selectedCounty.trim().ifBlank { str("out_your_county") }.uppercase()
+            message = strf("pest_clear_fmt", cropLabel, countyLabel)
         }
     }
     val pulse = rememberInfiniteTransition(label = "pestAlertPulse")
@@ -666,8 +690,8 @@ private fun PestOutbreakAlertBanner(selectedCounty: String) {
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Text(
-                text = str(messageKey),
-                color = content,
+                text = message,
+                color = Color.White,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
                 fontWeight = FontWeight.Bold
@@ -1988,8 +2012,8 @@ fun PremiumMarketAnalyzerScreen() {
             }
         }
 
-        // --- 1-i. NATIONAL BIOSECURITY ALERT CAPSULE (county-driven pest monitor) ---
-        PestOutbreakAlertBanner(selectedCounty = selectedCounty)
+        // --- 1-i. NATIONAL BIOSECURITY ALERT CAPSULE (county × crop pest monitor) ---
+        PestOutbreakAlertBanner(selectedCounty = selectedCounty, plantedCrop = farmerPlantedCrop)
 
         // Bottom-bar dialogs (mobile sheets replacing the old header buttons).
         if (navExpanded) {
