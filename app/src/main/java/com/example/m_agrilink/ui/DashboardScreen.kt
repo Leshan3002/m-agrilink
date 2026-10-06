@@ -772,6 +772,16 @@ private fun SaccoInputPlannerWidget(
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
+            if (!matrix.verified) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = str("sac_est_note"),
+                    color = Color(0xFF8D6E00),
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    fontStyle = FontStyle.Italic
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             if (matrix.id == "maize") {
                 Text(

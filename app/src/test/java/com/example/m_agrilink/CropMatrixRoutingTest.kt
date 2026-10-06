@@ -52,7 +52,41 @@ class CropMatrixRoutingTest {
     @Test
     fun unknownCrop_fallsBackToStandardMatrix() {
         val matrix = MarketDataRepository.getCropInputMatrix("coffee")
-        assertEquals("maize", matrix.id)
-        assertTrue(matrix.lines.isNotEmpty())
+        assertEquals("cash", matrix.id)
+    }
+
+    @Test
+    fun everyCrop_getsANamedPlan() {
+        val cases = mapOf(
+            "Onions" to "vegetable",
+            "Sorghum" to "cereal",
+            "Avocado" to "orchard",
+            "Green grams" to "legume",
+            "Soybean" to "legume",
+            "Tea" to "cash",
+            "Potatoes" to "vegetable",
+            "Wheat" to "cereal"
+        )
+        for ((crop, expectedId) in cases) {
+            val matrix = MarketDataRepository.getCropInputMatrix(crop)
+            assertEquals("crop=$crop", expectedId, matrix.id)
+        }
+    }
+
+    @Test
+    fun estimates_areFlagged_unverifiedSpecsAreNot() {
+        assertTrue(MarketDataRepository.getCropInputMatrix("Mango").verified)
+        assertTrue(MarketDataRepository.getCropInputMatrix("Beans").verified)
+        assertTrue(MarketDataRepository.getCropInputMatrix("Maize").verified)
+        assertTrue(!MarketDataRepository.getCropInputMatrix("Onions").verified)
+        assertTrue(!MarketDataRepository.getCropInputMatrix("Sorghum").verified)
+    }
+
+    @Test
+    fun onion_oneAcreProjection_isLive() {
+        val matrix = MarketDataRepository.getCropInputMatrix("Onions")
+        val costs = matrix.lines.map { (it.unitsPerAcre * 1).toInt() * it.unitPriceKes }
+        assertEquals(listOf(2600, 2000, 1800), costs)
+        assertEquals(6400, costs.sum())
     }
 }

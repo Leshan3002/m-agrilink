@@ -50,7 +50,17 @@ object SaccoTelemetry {
         "maize_seed_2kg",
         "maize_seed_10kg",
         "maize_dap_50kg",
-        "maize_compost_50kg"
+        "maize_compost_50kg",
+        "est_seedling",
+        "est_compost_50kg",
+        "est_trap",
+        "est_legume_2kg",
+        "est_npk_50kg",
+        "est_cereal_2kg",
+        "est_dap_50kg",
+        "est_can_50kg",
+        "est_vegseed_pkt",
+        "est_cashseed"
     )
 
     suspend fun fetchBaselines(): Map<String, Int>? = fetchFeed()?.first
