@@ -1,7 +1,6 @@
 package com.example.m_agrilink.network
 
 import android.content.Context
-import com.example.m_agrilink.BuildConfig
 import com.example.m_agrilink.data.local.AgriLinkDatabase
 import com.example.m_agrilink.data.local.CropAdvisory
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +50,7 @@ class CropLiveLookup(context: Context) {
 
     private val dao = AgriLinkDatabase.getDatabase(context.applicationContext).farmerDao()
 
-    private val gemini = GeminiRepository(BuildConfig.GEMINI_API_KEY)
+    private val gemini = GeminiRepository(SecureKeyVault.snapshot())
 
     private fun timedRetrofit(baseUrl: String): Retrofit {
         val client = OkHttpClient.Builder()
@@ -100,7 +99,7 @@ class CropLiveLookup(context: Context) {
     }
 
     private suspend fun geminiBrief(crop: String, county: String, temp: Double, humidity: Int, wind: Double): String? {
-        if (BuildConfig.GEMINI_API_KEY.isBlank()) return null
+        if (!SecureKeyVault.isConfigured()) return null
         return gemini.generateBrief(
             "You are a KALRO agronomist advising Kenyan smallholder farmers.",
             "Give a concise Kenyan field brief for $crop grown in $county " +

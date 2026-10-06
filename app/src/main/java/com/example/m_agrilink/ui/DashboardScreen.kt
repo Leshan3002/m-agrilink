@@ -16,8 +16,11 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.VolumeOff
@@ -63,6 +66,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Size
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -219,19 +223,8 @@ private fun overviewCta(): String = tr("overview_cta")
 
 private fun verifiedSourcesFootnote(): String = tr("overview_sources")
 
-/** Segmented TTS: reads the structured overview section by section with short pauses. */
-private fun speakOverviewSegments(
-    textToSpeech: TextToSpeech?,
-    plantedCrop: String,
-    liveDiagnosis: String,
-    confidencePct: Int,
-    source: String
-) {
-    val tts = textToSpeech ?: return
-    try {
-        tts.stop()
-    } catch (e: Exception) {
-    }
+/** Shared TTS locale policy: Swahili voice in Kiswahili mode, else US English. */
+private fun applyTtsLocale(tts: TextToSpeech) {
     // M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
     // Voice follows the Language picker: Kiswahili mode speaks Swahili (sw-KE when
     // the engine has it, else generic Swahili), English mode speaks US English.
@@ -249,9 +242,19 @@ private fun speakOverviewSegments(
         tts.language = voiceLocale
     } catch (e: Exception) {
     }
-    // Strip pictographs/bullets so the engine reads words, not emoji names.
-    fun speakable(s: String): String =
-        s.replace(Regex("[\\p{So}\\p{Sk}•●▲▼★☆→➔*]+"), " ").replace(Regex("\\s+"), " ").trim()
+}
+
+/** Strip pictographs/bullets so the engine reads words, not emoji names. */
+private fun speakableTtsText(s: String): String =
+    s.replace(Regex("[\\p{So}\\p{Sk}•●▲▼★☆→➔*]+"), " ").replace(Regex("\\s+"), " ").trim()
+
+/** Ordered narration parts for one scan verdict (shared by all TTS paths). */
+private fun buildOverviewSpeechParts(
+    plantedCrop: String,
+    liveDiagnosis: String,
+    confidencePct: Int,
+    source: String
+): List<String> {
     val segments = mutableListOf<String>()
     segments.add(ADVISORY_FRAMEWORK_ATTRIBUTION + " Shamba AI developed by Levis Lekesio.")
     // Speak exactly what the advisory card shows (already localized via tr()).
@@ -275,7 +278,126 @@ private fun speakOverviewSegments(
     } catch (e: Exception) {
     }
     segments.add(verifiedSourcesFootnote() + " Spoken by Shamba AI, developed by Levis Lekesio. $ADVISORY_FRAMEWORK_ATTRIBUTION")
-    segments.map(::speakable).filter { it.isNotBlank() }.forEachIndexed { index, part ->
+    return segments
+}
+
+/**
+ * Listener-driven playback controller: Start / Pause / Stop for the long
+ * CABI-KALRO-icipe narration. One chunk in flight at a time (QUEUE_FLUSH),
+ * advancing only on this controller's own utterance callbacks, so stop and
+ * pause take effect instantly with no leaked queue behind them.
+ */
+private class OverviewTtsController {
+    enum class State { IDLE, PLAYING, PAUSED }
+
+    var state by mutableStateOf(State.IDLE)
+        private set
+
+    private var chunks: List<String> = emptyList()
+    private var index = 0
+    private var engine: TextToSpeech? = null
+
+    private val listener = object : UtteranceProgressListener() {
+        override fun onStart(utteranceId: String?) {}
+        override fun onDone(utteranceId: String?) = advance(utteranceId)
+        override fun onError(utteranceId: String?) = advance(utteranceId)
+        @Deprecated("Required override")
+        override fun onError(utteranceId: String?, errorCode: Int) = advance(utteranceId)
+    }
+
+    private fun advance(utteranceId: String?) {
+        if (!utteranceId.orEmpty().startsWith(PREFIX)) return
+        if (state != State.PLAYING) return
+        if (utteranceId != PREFIX + index) return
+        index++
+        if (index >= chunks.size) {
+            index = 0
+            state = State.IDLE
+        } else {
+            speakCurrent()
+        }
+    }
+
+    fun attach(tts: TextToSpeech?) {
+        engine = tts
+        try {
+            tts?.setOnUtteranceProgressListener(listener)
+        } catch (e: Exception) {
+        }
+    }
+
+    fun start(parts: List<String>) {
+        val clean = parts.map(::speakableTtsText).filter { it.isNotBlank() }
+            .flatMap { it.chunked(400) }
+        try {
+            engine?.stop()
+        } catch (e: Exception) {
+        }
+        if (clean.isEmpty()) {
+            state = State.IDLE
+            return
+        }
+        chunks = clean
+        index = 0
+        state = State.PLAYING
+        speakCurrent()
+    }
+
+    fun pause() {
+        if (state != State.PLAYING) return
+        try {
+            engine?.stop()
+        } catch (e: Exception) {
+        }
+        state = State.PAUSED
+    }
+
+    fun resume() {
+        if (state != State.PAUSED) return
+        state = State.PLAYING
+        speakCurrent()
+    }
+
+    fun stop() {
+        try {
+            engine?.stop()
+        } catch (e: Exception) {
+        }
+        index = 0
+        state = State.IDLE
+    }
+
+    private fun speakCurrent() {
+        val tts = engine ?: run { state = State.IDLE; return }
+        applyTtsLocale(tts)
+        try {
+            tts.speak(chunks[index], TextToSpeech.QUEUE_FLUSH, null, PREFIX + index)
+        } catch (e: Exception) {
+            state = State.IDLE
+        }
+    }
+
+    companion object {
+        private const val PREFIX = "ovc_"
+    }
+}
+
+/** Segmented TTS: reads the structured overview section by section with short pauses. */
+private fun speakOverviewSegments(
+    textToSpeech: TextToSpeech?,
+    plantedCrop: String,
+    liveDiagnosis: String,
+    confidencePct: Int,
+    source: String
+) {
+    val tts = textToSpeech ?: return
+    try {
+        tts.stop()
+    } catch (e: Exception) {
+    }
+    applyTtsLocale(tts)
+    val segments = buildOverviewSpeechParts(plantedCrop, liveDiagnosis, confidencePct, source)
+    segments.map(::speakableTtsText).filter { it.isNotBlank() }.forEachIndexed { index, part ->
         part.chunked(400).forEach { chunk ->
             try {
                 tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, "overview_$index")
@@ -321,12 +443,29 @@ private fun ScanOverviewCard(
     val mutedText = Color(0xFFB9B9C0)
     val headerGold = Color(0xFFE6B325)
     val bulletGold = Color(0xFFE6B325)
+    val ttsController = remember { OverviewTtsController() }
+    LaunchedEffect(textToSpeech) { ttsController.attach(textToSpeech) }
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(6.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            Color(0xFFE6B325).copy(alpha = 0.45f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF064E3B), Color(0xFF1B4332))
+                    )
+                )
+        ) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text(
                 text = ADVISORY_FRAMEWORK_ATTRIBUTION,
@@ -349,25 +488,49 @@ private fun ScanOverviewCard(
                     letterSpacing = 0.5.sp,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(
-                    onClick = {
-                        if (AppAudioGate.muted) {
-                            AppAudioGate.muted = false
-                            speakOverviewSegments(textToSpeech, plantedCrop, liveDiagnosis, confidencePct, source)
-                        } else {
-                            try {
-                                textToSpeech?.stop()
-                            } catch (e: Exception) {
-                            }
-                            AppAudioGate.muted = true
-                        }
+                val ctlState = ttsController.state
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = {
+                            ttsController.start(
+                                buildOverviewSpeechParts(plantedCrop, liveDiagnosis, confidencePct, source)
+                            )
+                        },
+                        enabled = ctlState != OverviewTtsController.State.PLAYING
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = str("audio_start"),
+                            tint = headerGold
+                        )
                     }
-                ) {
-                    Icon(
-                        imageVector = if (AppAudioGate.muted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                        contentDescription = str("read_aloud"),
-                        tint = headerGold
-                    )
+                    IconButton(
+                        onClick = {
+                            if (ctlState == OverviewTtsController.State.PLAYING) ttsController.pause()
+                            else ttsController.resume()
+                        },
+                        enabled = ctlState != OverviewTtsController.State.IDLE
+                    ) {
+                        Icon(
+                            imageVector = if (ctlState == OverviewTtsController.State.PAUSED) {
+                                Icons.Filled.PlayArrow
+                            } else {
+                                Icons.Filled.Pause
+                            },
+                            contentDescription = str("audio_pause"),
+                            tint = headerGold
+                        )
+                    }
+                    IconButton(
+                        onClick = { ttsController.stop() },
+                        enabled = ctlState != OverviewTtsController.State.IDLE
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Stop,
+                            contentDescription = str("audio_stop"),
+                            tint = headerGold
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(2.dp))
@@ -513,6 +676,15 @@ private fun ScanOverviewCard(
                 fontSize = 10.sp,
                 lineHeight = 14.sp
             )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = str("scan_prod_tag"),
+                color = headerGold,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
         }
     }
 }
@@ -928,26 +1100,8 @@ private fun speakFaqAnswer(
         tts.stop()
     } catch (e: Exception) {
     }
-    // Voice follows the Language picker: Kiswahili mode speaks Swahili
-    // (sw-KE when the engine has it, else generic Swahili), else US English.
-    try {
-        val voiceLocale = if (AppLocale.isSwahili) {
-            val swKe = Locale("sw", "KE")
-            if (tts.isLanguageAvailable(swKe) >= TextToSpeech.LANG_AVAILABLE) swKe
-            else {
-                val sw = Locale("sw")
-                if (tts.isLanguageAvailable(sw) >= TextToSpeech.LANG_AVAILABLE) sw else Locale.US
-            }
-        } else {
-            Locale.US
-        }
-        tts.language = voiceLocale
-    } catch (e: Exception) {
-    }
-    // Strip pictographs/bullets so the engine reads words, not emoji names.
-    fun speakable(s: String): String =
-        s.replace(Regex("[\\p{So}\\p{Sk}•●▲▼★☆→➔*]+"), " ").replace(Regex("\\s+"), " ").trim()
-    listOf(question, answer).map(::speakable).filter { it.isNotBlank() }.forEach { part ->
+    applyTtsLocale(tts)
+    listOf(question, answer).map(::speakableTtsText).filter { it.isNotBlank() }.forEach { part ->
         part.chunked(400).forEach { chunk ->
             try {
                 tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, "faq_answer")
@@ -3667,6 +3821,24 @@ fun PremiumMarketAnalyzerScreen() {
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
+                                    // Strict validation fallback: unreadable frames never
+                                    // reach AI generation — verified offline data only.
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color(0xFFFFF8E1), RoundedCornerShape(8.dp))
+                                            .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(8.dp))
+                                            .padding(10.dp)
+                                    ) {
+                                        Text(
+                                            text = str("scan_diag_fallback"),
+                                            color = Color(0xFF2C2C2E),
+                                            fontSize = 12.sp,
+                                            lineHeight = 17.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
                                 }
                                 Box(
                                     modifier = Modifier
@@ -3854,12 +4026,19 @@ fun PremiumMarketAnalyzerScreen() {
                                                             Text(str("google_pulling"), fontSize = 12.sp, color = Color.DarkGray)
                                                         }
                                                     } else {
-                                                        Text(
-                                                            googleBrief ?: str("google_empty"),
-                                                            fontSize = 12.sp,
-                                                            lineHeight = 18.sp,
-                                                            color = Color(0xFF2C2C2E)
-                                                        )
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .heightIn(max = 420.dp)
+                                                                .verticalScroll(rememberScrollState())
+                                                        ) {
+                                                            Text(
+                                                                googleBrief ?: str("google_empty"),
+                                                                fontSize = 12.sp,
+                                                                lineHeight = 18.sp,
+                                                                color = Color(0xFF2C2C2E)
+                                                            )
+                                                        }
                                                     }
                                                     if (googleStallNotice && !googleLoading) {
                                                         Spacer(modifier = Modifier.height(8.dp))

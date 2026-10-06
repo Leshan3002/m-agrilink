@@ -6,9 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.m_agrilink.BuildConfig
 import com.example.m_agrilink.data.MarketDataRepository
 import com.example.m_agrilink.network.GeminiRepository
+import com.example.m_agrilink.network.SecureKeyVault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -18,8 +18,8 @@ enum class EngineStatus { UNKNOWN, ONLINE, OFFLINE }
 
 class AiAssistantViewModel : ViewModel() {
 
-    // Free-tier Gemini key injected via local.properties -> BuildConfig.
-    private val repository = GeminiRepository(BuildConfig.GEMINI_API_KEY)
+    // Production vision credential via the encrypted-state vault (never logged).
+    private val repository = GeminiRepository(SecureKeyVault.snapshot())
 
     val messages = mutableStateListOf<ChatMessage>()
     var engineStatus by mutableStateOf(EngineStatus.UNKNOWN)
@@ -71,7 +71,7 @@ class AiAssistantViewModel : ViewModel() {
      * Single failures never flap the badge (see registerFailure damping).
      */
     fun probeEngine() {
-        if (probeStarted || BuildConfig.GEMINI_API_KEY.isBlank()) return
+        if (probeStarted || !SecureKeyVault.isConfigured()) return
         probeStarted = true
         viewModelScope.launch {
             val ok = withContext(Dispatchers.IO) {
@@ -106,7 +106,7 @@ class AiAssistantViewModel : ViewModel() {
             return
         }
 
-        if (BuildConfig.GEMINI_API_KEY.isBlank()) {
+        if (!SecureKeyVault.isConfigured()) {
             messages.add(
                 ChatMessage(
                     "⚠️ My AI brain isn't connected yet — the app owner needs to add a " +

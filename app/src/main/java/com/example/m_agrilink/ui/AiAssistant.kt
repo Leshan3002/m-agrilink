@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,6 +31,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -490,19 +493,40 @@ fun ChatBubble(
             .padding(vertical = 4.dp),
         contentAlignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Surface(
-            color = if (message.isUser) Color(0xFFE8F5E9) else Color(0xFFF5F5F5),
-            shape = RoundedCornerShape(12.dp),
-            tonalElevation = 1.dp
+        // Glassmorphism field bubbles: gold-tinted glass for the farmer,
+        // deep field-green gradient with gold highlights for Shamba replies.
+        val bubbleBrush = if (message.isUser) {
+            Brush.linearGradient(
+                colors = listOf(Color(0xFFFFF8E1), Color(0xFFFFECB3))
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(Color(0xFF064E3B), Color(0xFF1B4332))
+            )
+        }
+        val bubbleBorder = if (message.isUser) {
+            Color(0xFFE6B325).copy(alpha = 0.6f)
+        } else {
+            Color.White.copy(alpha = 0.25f)
+        }
+        val bubbleText = if (message.isUser) Color(0xFF2C2C2E) else Color(0xFFF5F5F5)
+        val linkTint = if (message.isUser) Color(0xFF1E3A8A) else Color(0xFFE6B325)
+        Box(
+            modifier = Modifier
+                .shadow(4.dp, RoundedCornerShape(16.dp))
+                .background(bubbleBrush, RoundedCornerShape(16.dp))
+                .border(1.dp, bubbleBorder, RoundedCornerShape(16.dp))
+                .padding(12.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val links = remember(message.text) { extractChatLinks(message.text) }
                     if (message.isUser || links.isEmpty()) {
                         SelectionContainer(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = message.text,
-                                fontSize = 14.sp
+                                fontSize = 14.sp,
+                                color = bubbleText
                             )
                         }
                     } else {
@@ -519,7 +543,7 @@ fun ChatBubble(
                                     pushStringAnnotation(tag = "URL", annotation = cleaned)
                                     pushStyle(
                                         SpanStyle(
-                                            color = Color(0xFF1E3A8A),
+                                            color = linkTint,
                                             textDecoration = TextDecoration.Underline,
                                             fontWeight = FontWeight.Medium
                                         )
@@ -536,7 +560,7 @@ fun ChatBubble(
                         }
                         ClickableText(
                             text = linkedText,
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
+                            style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = bubbleText),
                             modifier = Modifier.weight(1f),
                             onClick = { offset ->
                                 linkedText.getStringAnnotations("URL", offset, offset)
@@ -549,7 +573,7 @@ fun ChatBubble(
                             Icon(
                                 imageVector = if (AppAudioGate.muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                                 contentDescription = if (AppAudioGate.muted) "Unmute all audio" else "Mute all audio",
-                                tint = Color(0xFF2E7D32),
+                                tint = Color(0xFFE6B325),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
