@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -1855,9 +1856,11 @@ fun PremiumMarketAnalyzerScreen() {
     // True when the enrichment pipeline stalls on auth/network failure:
     // the results column swaps in the soft-yellow Room-backup notice.
     var googleStallNotice by remember { mutableStateOf(false) }
-    val galleryPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
+    // Shared historical-image pipeline: both gallery pickers decode off the
+    // main thread, bound the bitmap, run the on-device quality gate, then
+    // feed the same crop-matched analysis + Gemini enrichment as live
+    // captures. Pure content-resolver IO — no CameraX session required.
+    fun processGalleryUri(uri: Uri?) {
         if (uri == null) {
             scope.launch(Dispatchers.Main) {
                 scannerError = tr("scan_no_image")
@@ -1867,7 +1870,7 @@ fun PremiumMarketAnalyzerScreen() {
                 diseaseScanComplete = false
                 isAnalyzing = false
             }
-            return@rememberLauncherForActivityResult
+            return
         }
         scope.launch(Dispatchers.IO) {
             try {
@@ -1950,6 +1953,16 @@ fun PremiumMarketAnalyzerScreen() {
             }
         }
     }
+
+    val galleryPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? -> processGalleryUri(uri) }
+    // Modern system photo picker for remote scouting (week-old field shots
+    // included). Falls back to the legacy picker where the system picker
+    // is unavailable.
+    val remoteScoutPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? -> processGalleryUri(uri) }
 
     fun openWebLink(url: String) {
         try {
@@ -3340,6 +3353,38 @@ fun PremiumMarketAnalyzerScreen() {
                     ) {
                         Text(str("scan_upload"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            try {
+                                remoteScoutPicker.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            } catch (e: Exception) {
+                                galleryPicker.launch("image/*")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2E))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Upload,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Text(str("scan_remote"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = str("scan_remote_tag"),
+                        color = Color.Gray,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp
+                    )
                     if (scanResult != null) {
                         Spacer(modifier = Modifier.height(10.dp))
                         val scanOk = liveConfidence >= 0.55f &&
