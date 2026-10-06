@@ -615,6 +615,69 @@ private fun HoneyOverviewCard(
 }
 
 /**
+ * Verified-fleet showcase entry: plate/model line plus verification badge,
+ * endorsement status and optional named-driver identity line.
+ * Demo showcase only — live NTSA / SACCO registry checks plug in here.
+ */
+private data class VerifiedFleetEntry(
+    val lorryKey: String,
+    val badgeKey: String,
+    val statusKey: String,
+    val driverKey: String? // null = no named driver line
+)
+
+@Composable
+private fun VerifiedFleetRow(entry: VerifiedFleetEntry) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF2C2C2E), RoundedCornerShape(10.dp))
+            .padding(12.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = str(entry.lorryKey),
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 19.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFE8F5E9), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = str(entry.badgeKey),
+                    color = Color(0xFF1B5E20),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = str(entry.statusKey),
+                color = Color(0xFF81C784),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            val driverKey = entry.driverKey
+            if (driverKey != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = str(driverKey),
+                    color = Color(0xFFE6B325),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+}
+
+/**
  * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
  *
  * Real-Time Lorry & Logistics Tracker: county-bound availability board.
@@ -626,6 +689,7 @@ private fun HoneyOverviewCard(
 private fun LogisticsTrackerComponent(
     selectedCounty: String,
     onContactDriver: (String) -> Unit,
+    onRegister: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val snapshotLang = AppLocale.language
@@ -638,6 +702,22 @@ private fun LogisticsTrackerComponent(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E))
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            // ⚠️ SHAMBA SAFETY PROTOCOL — high-contrast anti-fraud banner (absolute top header).
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFDC2626), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = str("logi_safety"),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = str("logi_title"),
                 fontSize = 16.sp,
@@ -665,6 +745,28 @@ private fun LogisticsTrackerComponent(
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
+            // 🛡️ VERIFIED FLEET — anti-fraud checked showcase rows (demo entries).
+            val verifiedFleet = remember {
+                listOf(
+                    VerifiedFleetEntry("logi_lorry1", "logi_lorry1_badge", "logi_lorry1_status", "logi_lorry1_driver"),
+                    VerifiedFleetEntry("logi_lorry2", "logi_lorry2_badge", "logi_lorry2_status", null)
+                )
+            }
+            Text(
+                text = str("logi_verified_h"),
+                color = Color(0xFFE6B325),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = str("logi_demo_note"),
+                color = Color.Gray,
+                fontSize = 11.sp,
+                fontStyle = FontStyle.Italic
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            verifiedFleet.forEach { entry -> VerifiedFleetRow(entry) }
             Button(
                 onClick = { onContactDriver(firstPhone) },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -673,12 +775,31 @@ private fun LogisticsTrackerComponent(
             ) {
                 Text(str("logi_contact"), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
+            TextButton(
+                onClick = onRegister,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = str("logi_register"),
+                    color = Color(0xFFE6B325),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = snapshot.moduleTag,
                 color = Color.Gray,
                 fontSize = 10.sp,
                 lineHeight = 14.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = str("logi_fraud_tag"),
+                color = Color(0xFFE6B325),
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }
@@ -1449,6 +1570,9 @@ fun PremiumMarketAnalyzerScreen() {
     val countyData = remember(selectedCounty) {
         MarketDataRepository.getCountyData(selectedCounty)
     }
+    val targetHubName = remember(selectedCounty) {
+        MarketDataRepository.targetHubFor(selectedCounty)
+    }
     var scanResult by rememberSaveable { mutableStateOf<String?>(null) }
     var logisticsTapped by rememberSaveable { mutableStateOf(false) }
     var farmerPlantedCrop by rememberSaveable { mutableStateOf("") }
@@ -1776,7 +1900,7 @@ fun PremiumMarketAnalyzerScreen() {
 
     // System back button: step back through scanner -> chat -> market/weather/articles/account pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles") {
+    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" || activeViewport == "driverReg") {
         when {
             isScanningForDisease -> {
                 isScanningForDisease = false
@@ -1787,7 +1911,7 @@ fun PremiumMarketAnalyzerScreen() {
                 analyzerAttached = false
             }
             showShambaChat -> showShambaChat = false
-            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" -> activeViewport = "home"
+            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" || activeViewport == "driverReg" -> activeViewport = "home"
         }
     }
 
@@ -2666,6 +2790,11 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
+            // Driver self-registration wizard (transporter onboarding).
+            if (activeViewport == "driverReg") {
+                DriverRegistrationScreen(onBackClick = { activeViewport = "home" })
+                Spacer(modifier = Modifier.height(16.dp))
+            }
             // Dedicated Weather Terminal page (separate from Home page).
             if (activeViewport == "weather") {
                 WeatherTerminalScreen(
@@ -2684,7 +2813,7 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles") {
+            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles" && activeViewport != "driverReg") {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
@@ -3093,7 +3222,7 @@ fun PremiumMarketAnalyzerScreen() {
                         )
                     } else {
                         Text(
-                            text = strf("arb_route", selectedCounty),
+                            text = strf("arb_route", selectedCounty, targetHubName),
                             color = Color.White,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
@@ -3169,6 +3298,7 @@ fun PremiumMarketAnalyzerScreen() {
             LogisticsTrackerComponent(
                 selectedCounty = selectedCounty,
                 onContactDriver = { dialPhone(it) },
+                onRegister = { activeViewport = "driverReg" },
                 modifier = Modifier.fillMaxWidth()
             )
 
