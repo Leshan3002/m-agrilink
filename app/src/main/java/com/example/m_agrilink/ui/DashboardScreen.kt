@@ -1852,6 +1852,9 @@ fun PremiumMarketAnalyzerScreen() {
     var googleBrief by remember { mutableStateOf<String?>(null) }
     var googleSource by remember { mutableStateOf("") }
     var googleLoading by remember { mutableStateOf(false) }
+    // True when the enrichment pipeline stalls on auth/network failure:
+    // the results column swaps in the soft-yellow Room-backup notice.
+    var googleStallNotice by remember { mutableStateOf(false) }
     val galleryPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -1889,6 +1892,7 @@ fun PremiumMarketAnalyzerScreen() {
                         googleBrief = null
                         googleSource = ""
                         googleLoading = false
+                        googleStallNotice = false
                         isScanningForDisease = true
                         diseaseScanComplete = false
                         isAnalyzing = false
@@ -1928,6 +1932,7 @@ fun PremiumMarketAnalyzerScreen() {
                     googleBrief = null
                     googleSource = ""
                     googleLoading = false
+                    googleStallNotice = false
                     isScanningForDisease = true
                     diseaseScanComplete = false
                     isAnalyzing = true
@@ -3306,6 +3311,7 @@ fun PremiumMarketAnalyzerScreen() {
                             googleBrief = null
                             googleSource = ""
                             googleLoading = false
+                            googleStallNotice = false
                             imageSourceLabel = tr("src_camera")
                             galleryBitmap = null
                             isGalleryMode = false
@@ -3572,6 +3578,7 @@ fun PremiumMarketAnalyzerScreen() {
                                                 googleBrief = null
                                                 googleSource = ""
                                                 googleLoading = false
+                                                googleStallNotice = false
                                                 imageSourceLabel = tr("src_camera")
                                                 galleryBitmap = null
                                                 isGalleryMode = false
@@ -3718,12 +3725,13 @@ fun PremiumMarketAnalyzerScreen() {
                                             Spacer(modifier = Modifier.height(10.dp))
                                             // Google-sourced enrichment: Gemini-first brief + web sources.
                                             val scanQuery = remember(liveDiagnosis, farmerPlantedCrop) {
-                                                val crop = farmerPlantedCrop.trim().ifBlank { "crop" }
+                                                val crop = CropNameNormalizer.canonicalOrOriginal(farmerPlantedCrop).ifBlank { "crop" }
                                                 "$crop $liveDiagnosis control and management Kenya"
                                             }
                                             LaunchedEffect(diseaseScanComplete, scanQuery) {
                                                 if (!diseaseScanComplete || googleLoading || googleBrief != null) return@LaunchedEffect
                                                 googleLoading = true
+                                                googleStallNotice = false
                                                 val (text, source) = try {
                                                     liveLookup.lookupCrop(
                                                         scanQuery,
@@ -3732,12 +3740,15 @@ fun PremiumMarketAnalyzerScreen() {
                                                         activeHumidity,
                                                         activeWindSpeed
                                                     )
+                                                } catch (e: retrofit2.HttpException) {
+                                                    tr("google_fail") to "OFFLINE"
                                                 } catch (e: Exception) {
                                                     tr("google_fail") to "OFFLINE"
                                                 }
                                                 googleBrief = text
                                                 googleSource = source
                                                 googleLoading = false
+                                                googleStallNotice = source == "OFFLINE"
                                             }
                                             Box(
                                                 modifier = Modifier
@@ -3805,6 +3816,24 @@ fun PremiumMarketAnalyzerScreen() {
                                                             color = Color(0xFF2C2C2E)
                                                         )
                                                     }
+                                                    if (googleStallNotice && !googleLoading) {
+                                                        Spacer(modifier = Modifier.height(8.dp))
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .background(Color(0xFFFFF8E1), RoundedCornerShape(8.dp))
+                                                                .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(8.dp))
+                                                                .padding(10.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = str("scan_net_stall"),
+                                                                fontSize = 12.sp,
+                                                                lineHeight = 17.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color(0xFF2C2C2E)
+                                                            )
+                                                        }
+                                                    }
                                                     Spacer(modifier = Modifier.height(8.dp))
                                                     val encoded = Uri.encode(scanQuery)
                                                     OutlinedButton(
@@ -3859,6 +3888,13 @@ fun PremiumMarketAnalyzerScreen() {
                                                     color = Color(0xFF2E7D32)
                                                 )
                                             }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = MarketDataRepository.PRODUCTION_MODULE_TAG,
+                                                fontSize = 10.sp,
+                                                lineHeight = 14.sp,
+                                                color = Color.Gray
+                                            )
                                         }
                                 }
                             }
