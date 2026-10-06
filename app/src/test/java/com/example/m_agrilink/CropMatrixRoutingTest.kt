@@ -59,12 +59,12 @@ class CropMatrixRoutingTest {
     fun everyCrop_getsANamedPlan() {
         val cases = mapOf(
             "Onions" to "vegetable",
+            "Potatoes" to "potato",
             "Sorghum" to "cereal",
             "Avocado" to "orchard",
             "Green grams" to "legume",
             "Soybean" to "legume",
             "Tea" to "cash",
-            "Potatoes" to "vegetable",
             "Wheat" to "cereal"
         )
         for ((crop, expectedId) in cases) {
@@ -88,5 +88,26 @@ class CropMatrixRoutingTest {
         val costs = matrix.lines.map { (it.unitsPerAcre * 1).toInt() * it.unitPriceKes }
         assertEquals(listOf(2600, 2000, 1800), costs)
         assertEquals(6400, costs.sum())
+    }
+
+    @Test
+    fun potatoes_planByTuberCount() {
+        val matrix = MarketDataRepository.getCropInputMatrix("Potatoes")
+        assertEquals("potato", matrix.id)
+        assertEquals(4000, matrix.lines[0].unitPriceKes)
+        assertEquals(10.0, matrix.lines[0].unitsPerAcre, 0.0)
+        val costs = matrix.lines.map { (it.unitsPerAcre * 1).toInt() * it.unitPriceKes }
+        assertEquals(listOf(40000, 4000, 1800), costs)
+        assertEquals(45800, costs.sum())
+    }
+
+    @Test
+    fun pineapple_doesNotHijackOrchardRule() {
+        assertEquals("standard", MarketDataRepository.getCropInputMatrix("Pineapple").id)
+    }
+
+    @Test
+    fun greenTea_routesToCash() {
+        assertEquals("cash", MarketDataRepository.getCropInputMatrix("Green Tea").id)
     }
 }

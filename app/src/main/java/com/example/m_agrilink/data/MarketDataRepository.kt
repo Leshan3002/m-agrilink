@@ -134,7 +134,8 @@ object MarketDataRepository {
         "est_dap_50kg" to 2000,
         "est_can_50kg" to 1800,
         "est_vegseed_pkt" to 650,
-        "est_cashseed" to 100
+        "est_cashseed" to 100,
+        "potato_seed_50kg" to 4000
     )
 
     private fun priceFor(key: String, overrides: Map<String, Int>): Int =
@@ -232,7 +233,8 @@ object MarketDataRepository {
             )
             "avocado" in crop || "macadamia" in crop || "citrus" in crop ||
                 "orange" in crop || "lemon" in crop || "pawpaw" in crop ||
-                "paw paw" in crop || "guava" in crop || "hass" in crop -> CropInputMatrix(
+                "paw paw" in crop || "guava" in crop || "hass" in crop ||
+                ("apple" in crop && "pineapple" !in crop) -> CropInputMatrix(
                 id = "orchard",
                 cropLabel = catLabel("sac_cat_orchard"),
                 verified = false,
@@ -255,7 +257,13 @@ object MarketDataRepository {
                 verified = false,
                 lines = cerealLines(overrides)
             )
-            "onion" in crop || "potato" in crop || "tomato" in crop ||
+            "potato" in crop || "viazi" in crop -> CropInputMatrix(
+                id = "potato",
+                cropLabel = catLabel("sac_cat_tuber"),
+                verified = false,
+                lines = potatoLines(overrides)
+            )
+            "onion" in crop || "tomato" in crop ||
                 "cabbage" in crop || "kale" in crop || "sukuma" in crop ||
                 "carrot" in crop || "spinach" in crop || "managu" in crop -> CropInputMatrix(
                 id = "vegetable",
@@ -263,7 +271,7 @@ object MarketDataRepository {
                 verified = false,
                 lines = vegetableLines(overrides)
             )
-            "coffee" in crop || crop == "tea" || "tea " in crop || "cotton" in crop ||
+            "coffee" in crop || "tea" in crop || "cotton" in crop ||
                 "sugarcane" in crop || "sugar cane" in crop || "tobacco" in crop ||
                 "pyrethrum" in crop || "sisal" in crop || "cashew" in crop ||
                 "sunflower" in crop -> CropInputMatrix(
@@ -356,6 +364,25 @@ object MarketDataRepository {
             tr("sac_est_dap_name"), tr("sac_est_dap_spec"),
             unitPriceKes = priceFor("est_dap_50kg", overrides),
             unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
+        ),
+        CropInputSpec(
+            tr("sac_est_can_name"), tr("sac_est_can_spec"),
+            unitPriceKes = priceFor("est_can_50kg", overrides),
+            unitsPerAcre = 1.0, unitLabel = tr("sac_unit_bag")
+        )
+    )
+
+    /** Potato growers plan by tuber count: bags sized to ≈800 tubers each. */
+    private fun potatoLines(overrides: Map<String, Int>): List<CropInputSpec> = listOf(
+        CropInputSpec(
+            tr("sac_potato_seed_name"), tr("sac_potato_seed_spec"),
+            unitPriceKes = priceFor("potato_seed_50kg", overrides),
+            unitsPerAcre = 10.0, unitLabel = tr("sac_unit_bag")
+        ),
+        CropInputSpec(
+            tr("sac_est_dap_name"), tr("sac_est_dap_spec"),
+            unitPriceKes = priceFor("est_dap_50kg", overrides),
+            unitsPerAcre = 2.0, unitLabel = tr("sac_unit_bag")
         ),
         CropInputSpec(
             tr("sac_est_can_name"), tr("sac_est_can_spec"),
