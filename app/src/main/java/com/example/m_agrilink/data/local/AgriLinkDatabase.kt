@@ -13,13 +13,15 @@ import net.sqlcipher.database.SupportFactory
  * Offline-first Room database. No payment gateway entities (informational build).
  */
 @Database(
-    entities = [CropAdvisory::class, HydrologicalAlert::class, ExpertForumPost::class, FarmerProfile::class, CropSearchHistory::class],
-    version = 6,
+    entities = [CropAdvisory::class, HydrologicalAlert::class, ExpertForumPost::class, FarmerProfile::class, CropSearchHistory::class, SubsidyBaseline::class],
+    version = 7,
     exportSchema = false
 )
 abstract class AgriLinkDatabase : RoomDatabase() {
 
     abstract fun farmerDao(): FarmerDao
+
+    abstract fun subsidyDao(): SubsidyDao
 
     companion object {
         @Volatile
@@ -70,6 +72,13 @@ abstract class AgriLinkDatabase : RoomDatabase() {
             }
         }
 
+        // v7: subsidy baseline cache for offline input telemetry.
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `subsidy_baseline` (`key` TEXT PRIMARY KEY NOT NULL, `priceKes` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)")
+            }
+        }
+
         fun getDatabase(context: Context): AgriLinkDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -81,7 +90,7 @@ abstract class AgriLinkDatabase : RoomDatabase() {
                     "magrilink_database"
                 )
                 .openHelperFactory(SupportFactory(passphrase))
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .fallbackToDestructiveMigration()
                 .build()

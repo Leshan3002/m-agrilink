@@ -53,7 +53,9 @@ object SaccoTelemetry {
         "maize_compost_50kg"
     )
 
-    suspend fun fetchBaselines(): Map<String, Int>? {
+    suspend fun fetchBaselines(): Map<String, Int>? = fetchFeed()?.first
+
+    suspend fun fetchFeed(): Pair<Map<String, Int>, String>? {
         return try {
             val client = OkHttpClient.Builder()
                 .connectTimeout(8, TimeUnit.SECONDS)
@@ -69,7 +71,7 @@ object SaccoTelemetry {
             val overrides = response.prices
                 .filter { it.key in KNOWN_KEYS && it.priceKes > 0 }
                 .associate { it.key to it.priceKes }
-            if (overrides.isEmpty()) null else overrides
+            if (overrides.isEmpty()) null else overrides to response.updated
         } catch (e: Exception) {
             null
         }

@@ -724,16 +724,17 @@ private fun SaccoInputPlannerWidget(
     val saccoLang = AppLocale.language
     val cropKey = plantedCrop.trim().lowercase()
     var maizePack by rememberSaveable { mutableStateOf("10kg") }
-    // Live national telemetry on a background thread; any failure falls
-    // back to the cached 2026 baselines inside the matrix builder.
-    var livePrices by remember { mutableStateOf<Map<String, Int>?>(null) }
+    val appContext = LocalContext.current.applicationContext
+    // Live telemetry first; on signal drop the Room cache answers; when the
+    // cache is also empty the in-code 2026 baselines apply. All off-main.
+    var feed by remember { mutableStateOf(MarketDataRepository.SubsidyFeed(emptyMap(), false, "")) }
     LaunchedEffect(saccoLang) {
-        livePrices = withContext(Dispatchers.IO) { SaccoTelemetry.fetchBaselines() }
+        feed = withContext(Dispatchers.IO) { MarketDataRepository.loadSubsidyFeed(appContext) }
     }
-    val matrix = remember(cropKey, saccoLang, livePrices, maizePack) {
+    val matrix = remember(cropKey, saccoLang, feed, maizePack) {
         MarketDataRepository.getCropInputMatrix(
             cropKey,
-            overrides = livePrices ?: emptyMap(),
+            overrides = feed.prices,
             maizeSeedPack = maizePack
         )
     }
@@ -851,31 +852,49 @@ private fun SaccoInputPlannerWidget(
                 shape = RoundedCornerShape(12.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = strf("sac_proj_for", if (acreageInput.isBlank()) "0" else acreageInput),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C2C2E)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            projection.forEach { (line, qty, costKes) ->
-                Text(
-                    text = strf("sac_line_fmt", line.name, formatQty(qty), line.unitLabel, formatKes(costKes)),
-                    fontSize = 13.sp,
-                    color = Color.DarkGray,
-                    lineHeight = 18.sp
-                )
+            // Live responsive revenue summary: sectioned high-contrast card.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E))
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text(
+                        text = strf("sac_proj_for", if (acreageInput.isBlank()) "0" else acreageInput),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE6B325)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    projection.forEach { (line, qty, costKes) ->
+                        Text(
+                            text = strf("sac_line_fmt", line.name, formatQty(qty), line.unitLabel, formatKes(costKes)),
+                            fontSize = 13.sp,
+                            color = Color.White,
+                            lineHeight = 19.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(color = Color.DarkGray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = strf("sac_total", formatKes(totalKes)),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFE6B325)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (feed.live) strf("sac_src_live", feed.stamp.ifBlank { "—" })
+                        else str("sac_src_cached"),
+                        fontSize = 11.sp,
+                        color = if (feed.live) Color(0xFF81C784) else Color.Gray
+                    )
+                }
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = strf("sac_total", formatKes(totalKes)),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF1B5E20)
-            )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = MarketDataRepository.PRODUCTION_MODULE_TAG,
+                text = str("sac_planner_tag"),
                 color = Color.Gray,
                 fontSize = 10.sp,
                 lineHeight = 14.sp

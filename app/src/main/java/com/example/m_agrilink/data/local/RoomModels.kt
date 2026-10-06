@@ -75,3 +75,15 @@ data class CropSearchHistory(
     val source: String, // LOCAL, GEMINI, WIKI, CACHE
     val timestamp: Long = System.currentTimeMillis()
 )
+
+/**
+ * 4. SUBSIDY BASELINE CACHE (Ministry of Agriculture input telemetry).
+ * Live telemetry snapshots persisted locally so the planner survives
+ * cellular signal drops in remote fields.
+ */
+@Entity(tableName = "subsidy_baseline")
+data class SubsidyBaseline(
+    @PrimaryKey val key: String,
+    val priceKes: Int,
+    val updatedAt: Long = System.currentTimeMillis()
+)

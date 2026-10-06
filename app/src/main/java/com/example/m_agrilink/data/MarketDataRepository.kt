@@ -1,5 +1,8 @@
 package com.example.m_agrilink.data
 
+import android.content.Context
+import com.example.m_agrilink.data.local.AgriLinkDatabase
+import com.example.m_agrilink.data.local.SubsidyBaseline
 import com.example.m_agrilink.ui.tr
 import com.example.m_agrilink.ui.trf
 import kotlin.math.abs
@@ -113,7 +116,7 @@ object MarketDataRepository {
     /** Cached 2026 pricing baselines (Ministry of Agriculture directives). */
     private val BASELINES_2026: Map<String, Int> = mapOf(
         "mango_seedling" to 150,
-        "mango_compost_50kg" to 1200,
+        "mango_compost_50kg" to 2000,
         "mango_trap" to 350,
         "beans_seed_2kg" to 450,
         "beans_npk_50kg" to 2000,
@@ -125,6 +128,30 @@ object MarketDataRepository {
 
     private fun priceFor(key: String, overrides: Map<String, Int>): Int =
         overrides[key]?.takeIf { it > 0 } ?: (BASELINES_2026[key] ?: 0)
+
+    /** Live feed if reachable, else the Room cache, else empty (in-code baselines apply). */
+    data class SubsidyFeed(
+        val prices: Map<String, Int>,
+        val live: Boolean,
+        val stamp: String
+    )
+
+    suspend fun loadSubsidyFeed(appContext: Context): SubsidyFeed {
+        return try {
+            val dao = AgriLinkDatabase.getDatabase(appContext).subsidyDao()
+            val net = SaccoTelemetry.fetchFeed()
+            if (net != null) {
+                val now = System.currentTimeMillis()
+                dao.saveAll(net.first.map { (k, v) -> SubsidyBaseline(k, v, now) })
+                SubsidyFeed(net.first, live = true, stamp = net.second)
+            } else {
+                val cached = dao.loadAll().associate { it.key to it.priceKes }
+                SubsidyFeed(cached, live = false, stamp = "")
+            }
+        } catch (e: Exception) {
+            SubsidyFeed(emptyMap(), live = false, stamp = "")
+        }
+    }
 
     /**
      * Dynamic crop seed & fertilizer lookup. The query is the farmer's active
@@ -152,7 +179,7 @@ object MarketDataRepository {
                     CropInputSpec(
                         tr("sac_mango_fert_name"), tr("sac_mango_fert_spec"),
                         unitPriceKes = priceFor("mango_compost_50kg", overrides),
-                        unitsPerAcre = 4.0, unitLabel = tr("sac_unit_bag")
+                        unitsPerAcre = 2.0, unitLabel = tr("sac_unit_bag")
                     ),
                     CropInputSpec(
                         tr("sac_mango_trap_name"), tr("sac_mango_trap_spec"),
