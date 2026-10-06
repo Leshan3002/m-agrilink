@@ -2,6 +2,7 @@ package com.example.m_agrilink.ui.components
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -144,6 +145,61 @@ private fun NetworkGalleryImage(
 }
 
 /**
+ * Expandable operational guide row: header tap flips a single boolean state
+ * (main-thread click handler, snapshot-safe read during composition), so
+ * expansion never blocks, leaks, or stutters frames.
+ */
+@Composable
+private fun ExpandableGuideCard(
+    titleKey: String,
+    bodyKeys: List<String>
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(
+        onClick = { expanded = !expanded },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, HoneyGold),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = str(titleKey),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HoneyInk,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = if (expanded) str("hive_collapse") else str("hive_expand"),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = HoneyGold
+                )
+            }
+            if (expanded) {
+                Spacer(modifier = Modifier.height(8.dp))
+                bodyKeys.forEach { key ->
+                    Text(
+                        text = str(key),
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = HoneyInk
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+}
+
+/**
  * Honey-themed apiculture card: warm amber surfaces, deep-brown text and
  * harvest-gold accents matching the honey product line.
  */
@@ -221,6 +277,22 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                 color = HoneyInk
             )
 
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 2-i. KALRO Apiary Security & Pest Controls (expandable).
+            ExpandableGuideCard(
+                titleKey = "hive_security_h",
+                bodyKeys = listOf("hive_security_1", "hive_security_2", "hive_security_3")
+            )
+
+            // 2-ii. Safe Smoke & Honey Extraction Guide (expandable).
+            ExpandableGuideCard(
+                titleKey = "hive_extract_h",
+                bodyKeys = listOf("hive_extract_1", "hive_extract_2", "hive_extract_3", "hive_extract_4")
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // 3. Dynamic Public Imagery Row
@@ -277,6 +349,14 @@ fun HiveJournalComponent(modifier: Modifier = Modifier) {
                 fontSize = 10.sp,
                 lineHeight = 14.sp,
                 color = HoneyInk.copy(alpha = 0.6f)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = str("hive_engine_tag"),
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = HoneyInk.copy(alpha = 0.7f)
             )
         }
     }
