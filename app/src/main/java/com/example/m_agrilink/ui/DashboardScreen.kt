@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShowChart
@@ -32,6 +33,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -41,6 +43,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -913,6 +916,46 @@ private fun SaccoInputPlannerWidget(
     }
 }
 
+/** FAQ narration: reads one troubleshooting answer aloud in the active language. */
+private fun speakFaqAnswer(
+    textToSpeech: TextToSpeech?,
+    question: String,
+    answer: String
+) {
+    val tts = textToSpeech ?: return
+    try {
+        tts.stop()
+    } catch (e: Exception) {
+    }
+    // Voice follows the Language picker: Kiswahili mode speaks Swahili
+    // (sw-KE when the engine has it, else generic Swahili), else US English.
+    try {
+        val voiceLocale = if (AppLocale.isSwahili) {
+            val swKe = Locale("sw", "KE")
+            if (tts.isLanguageAvailable(swKe) >= TextToSpeech.LANG_AVAILABLE) swKe
+            else {
+                val sw = Locale("sw")
+                if (tts.isLanguageAvailable(sw) >= TextToSpeech.LANG_AVAILABLE) sw else Locale.US
+            }
+        } else {
+            Locale.US
+        }
+        tts.language = voiceLocale
+    } catch (e: Exception) {
+    }
+    // Strip pictographs/bullets so the engine reads words, not emoji names.
+    fun speakable(s: String): String =
+        s.replace(Regex("[\\p{So}\\p{Sk}•●▲▼★☆→➔*]+"), " ").replace(Regex("\\s+"), " ").trim()
+    listOf(question, answer).map(::speakable).filter { it.isNotBlank() }.forEach { part ->
+        part.chunked(400).forEach { chunk ->
+            try {
+                tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, "faq_answer")
+            } catch (e: Exception) {
+            }
+        }
+    }
+}
+
 /**
  * Expandable Frequently Asked Questions: tap a question card to smoothly
  * reveal its answer. No fixed heights — safe inside the parent verticalScroll.
@@ -921,9 +964,15 @@ private fun SaccoInputPlannerWidget(
 private fun FaqItem(
     question: String,
     answer: String,
+    textToSpeech: TextToSpeech? = null,
     modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(false) }
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(),
+        label = "faqArrow"
+    )
     Card(
         onClick = { isExpanded = !isExpanded },
         modifier = modifier.fillMaxWidth(),
@@ -944,12 +993,13 @@ private fun FaqItem(
                     color = Color(0xFF2C2C2E),
                     modifier = Modifier.weight(1f)
                 )
-                Text(
-                    text = if (isExpanded) "▲" else "▼",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2E7D32),
-                    modifier = Modifier.padding(start = 8.dp)
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) str("faq_collapse") else str("faq_expand"),
+                    tint = Color(0xFF2E7D32),
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .graphicsLayer { rotationZ = arrowRotation }
                 )
             }
             AnimatedVisibility(
@@ -959,12 +1009,29 @@ private fun FaqItem(
             ) {
                 Column {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = answer,
-                        fontSize = 13.sp,
-                        lineHeight = 19.sp,
-                        color = Color.DarkGray
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = answer,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            color = Color.DarkGray,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (textToSpeech != null) {
+                            IconButton(
+                                onClick = { speakFaqAnswer(textToSpeech, question, answer) }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.VolumeUp,
+                                    contentDescription = str("faq_listen"),
+                                    tint = Color(0xFF2E7D32)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -973,6 +1040,7 @@ private fun FaqItem(
 
 @Composable
 private fun FaqSectionComponent(
+    textToSpeech: TextToSpeech? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -988,13 +1056,13 @@ private fun FaqSectionComponent(
                 color = Color(0xFF2C2C2E)
             )
             Spacer(modifier = Modifier.height(10.dp))
-            FaqItem(question = str("faq_q1"), answer = str("faq_a1"))
+            FaqItem(question = str("faq_q1"), answer = str("faq_a1"), textToSpeech = textToSpeech)
             Spacer(modifier = Modifier.height(8.dp))
-            FaqItem(question = str("faq_q2"), answer = str("faq_a2"))
+            FaqItem(question = str("faq_q2"), answer = str("faq_a2"), textToSpeech = textToSpeech)
             Spacer(modifier = Modifier.height(8.dp))
-            FaqItem(question = str("faq_q3"), answer = str("faq_a3"))
+            FaqItem(question = str("faq_q3"), answer = str("faq_a3"), textToSpeech = textToSpeech)
             Spacer(modifier = Modifier.height(8.dp))
-            FaqItem(question = str("faq_q4"), answer = str("faq_a4"))
+            FaqItem(question = str("faq_q4"), answer = str("faq_a4"), textToSpeech = textToSpeech)
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = "M-AgriLink Documentation Engine — Managed and Compiled by Lead Developer Levis Lekesio.",
@@ -3194,7 +3262,7 @@ fun PremiumMarketAnalyzerScreen() {
             Spacer(modifier = Modifier.height(16.dp))
 
             // --- 3-iv. FREQUENTLY ASKED QUESTIONS (expandable docs) ---
-            FaqSectionComponent(modifier = Modifier.fillMaxWidth())
+            FaqSectionComponent(textToSpeech = textToSpeech, modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(28.dp))
 
