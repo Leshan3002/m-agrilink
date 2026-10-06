@@ -433,6 +433,36 @@ object MarketDataRepository {
     private fun normalizeCounty(label: String): String =
         legacyAliases[label] ?: label
 
+    private val coastCorridor: Set<String> = setOf(
+        "Mombasa", "Kwale", "Kilifi", "Tana River", "Lamu", "Taita-Taveta"
+    )
+    private val kisumuCorridor: Set<String> = setOf(
+        "Siaya", "Kisumu", "Homa Bay", "Migori", "Kisii", "Nyamira"
+    )
+    private val eldoretCorridor: Set<String> = setOf(
+        "Turkana", "West Pokot", "Trans-Nzoia", "Uasin Gishu", "Elgeyo-Marakwet",
+        "Nandi", "Kakamega", "Vihiga", "Bungoma", "Busia"
+    )
+    private val nakuruCorridor: Set<String> = setOf(
+        "Samburu", "Baringo", "Laikipia", "Nakuru", "Narok", "Kericho", "Bomet"
+    )
+
+    /**
+     * Destination trading-hub display name for a county corridor.
+     * Coast -> Mombasa Port; Nyanza -> Kisumu (Kibuye); north Rift +
+     * western -> Eldoret Main; central Rift -> Nakuru Corridor; Nairobi
+     * metro, eastern and northern arid counties -> Nairobi Hub.
+     */
+    fun targetHubFor(countyLabel: String): String {
+        return when (normalizeCounty(countyLabel)) {
+            in coastCorridor -> "Mombasa Port"
+            in kisumuCorridor -> "Kisumu (Kibuye)"
+            in eldoretCorridor -> "Eldoret Main"
+            in nakuruCorridor -> "Nakuru Corridor"
+            else -> "Nairobi Hub"
+        }
+    }
+
     private fun generatedCountyData(county: String): List<CropMarketRecord> {
         val seed = abs(county.hashCode())
         val maizeLocal = 3800 + (seed % 1700)
