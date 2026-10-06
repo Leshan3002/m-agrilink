@@ -1559,7 +1559,9 @@ private fun MarketOverviewPage(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PremiumMarketAnalyzerScreen() {
+fun PremiumMarketAnalyzerScreen(
+    onOpenTransporterRegistration: () -> Unit = {}
+) {
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(false) }
     // Session states survive minimize / rotation / process death.
@@ -1900,7 +1902,7 @@ fun PremiumMarketAnalyzerScreen() {
 
     // System back button: step back through scanner -> chat -> market/weather/articles/account pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" || activeViewport == "driverReg") {
+    BackHandler(enabled = isScanningForDisease || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles") {
         when {
             isScanningForDisease -> {
                 isScanningForDisease = false
@@ -1911,7 +1913,7 @@ fun PremiumMarketAnalyzerScreen() {
                 analyzerAttached = false
             }
             showShambaChat -> showShambaChat = false
-            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" || activeViewport == "driverReg" -> activeViewport = "home"
+            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" -> activeViewport = "home"
         }
     }
 
@@ -2790,11 +2792,6 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            // Driver self-registration wizard (transporter onboarding).
-            if (activeViewport == "driverReg") {
-                DriverRegistrationScreen(onBackClick = { activeViewport = "home" })
-                Spacer(modifier = Modifier.height(16.dp))
-            }
             // Dedicated Weather Terminal page (separate from Home page).
             if (activeViewport == "weather") {
                 WeatherTerminalScreen(
@@ -2813,7 +2810,7 @@ fun PremiumMarketAnalyzerScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles" && activeViewport != "driverReg") {
+            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles") {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
@@ -3298,7 +3295,7 @@ fun PremiumMarketAnalyzerScreen() {
             LogisticsTrackerComponent(
                 selectedCounty = selectedCounty,
                 onContactDriver = { dialPhone(it) },
-                onRegister = { activeViewport = "driverReg" },
+                onRegister = onOpenTransporterRegistration,
                 modifier = Modifier.fillMaxWidth()
             )
 
