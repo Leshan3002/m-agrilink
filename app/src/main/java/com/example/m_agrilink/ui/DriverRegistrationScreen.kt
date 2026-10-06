@@ -49,7 +49,49 @@ import androidx.core.content.ContextCompat
 
 /** Immutable development stamp (top header layout). */
 private const val DRIVER_CONSOLE_STAMP =
-    "M-AgriLink Security Console — Programmed and Configured by Lead System Architect Levis Lekesio."
+    "M-AgriLink Security Console — Configured and Directed by Lead System Architect Levis Lekesio."
+
+/**
+ * Local edge-quality gate for a captured document photo. Downsamples the
+ * bitmap to a 32x32 luminance grid and rejects captures whose mean
+ * brightness indicates suboptimal lighting, or whose contrast spread
+ * resembles a blank-surface placeholder. Never throws: any failure to
+ * read pixels fails closed (returns false).
+ */
+private fun validateCapturedDocumentTexture(bitmap: Bitmap): Boolean {
+    return try {
+        val size = 32
+        val scaled = Bitmap.createScaledBitmap(bitmap, size, size, true)
+        val pixels = IntArray(size * size)
+        scaled.getPixels(pixels, 0, size, 0, 0, size, size)
+        var sum = 0.0
+        val lums = DoubleArray(pixels.size)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val lum = 0.299 * ((p shr 16) and 0xFF) +
+                0.587 * ((p shr 8) and 0xFF) +
+                0.114 * (p and 0xFF)
+            lums[i] = lum
+            sum += lum
+        }
+        val mean = sum / lums.size
+        var variance = 0.0
+        for (lum in lums) {
+            val d = lum - mean
+            variance += d * d
+        }
+        val stdDev = kotlin.math.sqrt(variance / lums.size)
+        try {
+            scaled.recycle()
+        } catch (e: Exception) {
+        }
+        if (mean < 40.0) return false // too dark: suboptimal lighting
+        if (stdDev < 12.0) return false // flat field: blank surface placeholder
+        true
+    } catch (e: Exception) {
+        false
+    }
+}
 
 /** Background verification holding-loop states for a submitted driver profile. */
 private enum class DriverStatus {
@@ -76,6 +118,7 @@ private data class DriverVerificationProfile(
 private fun DocumentUploadRow(
     labelKey: String,
     bitmap: Bitmap?,
+    showError: Boolean,
     onCapture: () -> Unit
 ) {
     Row(
@@ -122,6 +165,23 @@ private fun DocumentUploadRow(
             )
         }
     }
+    if (showError) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFDC2626), RoundedCornerShape(10.dp))
+                .padding(10.dp)
+        ) {
+            Text(
+                text = str("driver_doc_error"),
+                color = Color.White,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
     Spacer(modifier = Modifier.height(8.dp))
 }
 
@@ -134,11 +194,15 @@ fun DriverRegistrationScreen(
     var idNumber by remember { mutableStateOf("") }
     var mobile by remember { mutableStateOf("") }
     var plateNumber by remember { mutableStateOf("") }
-    var idImg by remember { mutableStateOf<Bitmap?>(null) }
-    var dlImg by remember { mutableStateOf<Bitmap?>(null) }
+    var idFrontImg by remember { mutableStateOf<Bitmap?>(null) }
+    var idBackImg by remember { mutableStateOf<Bitmap?>(null) }
+    var dlFrontImg by remember { mutableStateOf<Bitmap?>(null) }
+    var dlBackImg by remember { mutableStateOf<Bitmap?>(null) }
     var logbookImg by remember { mutableStateOf<Bitmap?>(null) }
     var clearanceImg by remember { mutableStateOf<Bitmap?>(null) }
     var pendingSlot by remember { mutableStateOf<Int?>(null) }
+    // Slots currently failing the texture gate (0..5); each renders its own banner.
+    var slotErrors by remember { mutableStateOf(setOf<Int>()) }
     var verificationStatus by remember { mutableStateOf(DriverStatus.NOT_SUBMITTED) }
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -149,21 +213,37 @@ fun DriverRegistrationScreen(
         )
     }
 
+    // Camera capture callback handler: every shot passes through the
+    // texture gate first. Dark or blank captures are blocked from the
+    // upload loop and flag that slot's error banner instead of crashing.
+    fun onImageCaptured(slot: Int, bmp: Bitmap) {
+        if (validateCapturedDocumentTexture(bmp)) {
+            when (slot) {
+                0 -> idFrontImg = bmp
+                1 -> idBackImg = bmp
+                2 -> dlFrontImg = bmp
+                3 -> dlBackImg = bmp
+                4 -> logbookImg = bmp
+                5 -> clearanceImg = bmp
+            }
+            slotErrors = slotErrors - slot
+        } else {
+            slotErrors = slotErrors + slot
+        }
+        pendingSlot = null
+    }
     // Single lifecycle-aware picture-capture launcher; the pending slot
     // records which document row requested the shot. No CameraX session is
     // bound here, so there is nothing to leak on dispose.
     val captureLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bmp ->
-        if (bmp != null) {
-            when (pendingSlot) {
-                0 -> idImg = bmp
-                1 -> dlImg = bmp
-                2 -> logbookImg = bmp
-                3 -> clearanceImg = bmp
-            }
+        val slot = pendingSlot
+        if (bmp != null && slot != null) {
+            onImageCaptured(slot, bmp)
+        } else {
+            pendingSlot = null
         }
-        pendingSlot = null
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -196,16 +276,20 @@ fun DriverRegistrationScreen(
     val mobileOk = mobile.trim().replace(" ", "").matches(Regex("^0[17]\\d{8}$"))
     val plateOk = plateNumber.trim().uppercase()
         .matches(Regex("^[A-Z]{3} ?\\d{3}[A-Z]$"))
-    val hasIdImg = idImg != null
-    val hasDlImg = dlImg != null
+    val hasIdFrontImg = idFrontImg != null
+    val hasIdBackImg = idBackImg != null
+    val hasDlFrontImg = dlFrontImg != null
+    val hasDlBackImg = dlBackImg != null
     val hasLogbookImg = logbookImg != null
     val hasClearanceImg = clearanceImg != null
     val isFormValid = remember(
         name, idNumber, mobile, plateNumber,
-        hasIdImg, hasDlImg, hasLogbookImg, hasClearanceImg
+        hasIdFrontImg, hasIdBackImg, hasDlFrontImg, hasDlBackImg,
+        hasLogbookImg, hasClearanceImg
     ) {
         nameOk && idOk && mobileOk && plateOk &&
-            hasIdImg && hasDlImg && hasLogbookImg && hasClearanceImg
+            hasIdFrontImg && hasIdBackImg && hasDlFrontImg && hasDlBackImg &&
+            hasLogbookImg && hasClearanceImg
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -366,10 +450,12 @@ fun DriverRegistrationScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(8.dp))
-                        DocumentUploadRow("driver_up_id", idImg) { requestCapture(0) }
-                        DocumentUploadRow("driver_up_dl", dlImg) { requestCapture(1) }
-                        DocumentUploadRow("driver_up_logbook", logbookImg) { requestCapture(2) }
-                        DocumentUploadRow("driver_up_clearance", clearanceImg) { requestCapture(3) }
+                        DocumentUploadRow("driver_up_id_front", idFrontImg, 0 in slotErrors) { requestCapture(0) }
+                        DocumentUploadRow("driver_up_id_back", idBackImg, 1 in slotErrors) { requestCapture(1) }
+                        DocumentUploadRow("driver_up_dl_front", dlFrontImg, 2 in slotErrors) { requestCapture(2) }
+                        DocumentUploadRow("driver_up_dl_back", dlBackImg, 3 in slotErrors) { requestCapture(3) }
+                        DocumentUploadRow("driver_up_logbook", logbookImg, 4 in slotErrors) { requestCapture(4) }
+                        DocumentUploadRow("driver_up_clearance", clearanceImg, 5 in slotErrors) { requestCapture(5) }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))

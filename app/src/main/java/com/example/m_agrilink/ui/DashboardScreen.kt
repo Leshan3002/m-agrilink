@@ -615,69 +615,6 @@ private fun HoneyOverviewCard(
 }
 
 /**
- * Verified-fleet showcase entry: plate/model line plus verification badge,
- * endorsement status and optional named-driver identity line.
- * Demo showcase only — live NTSA / SACCO registry checks plug in here.
- */
-private data class VerifiedFleetEntry(
-    val lorryKey: String,
-    val badgeKey: String,
-    val statusKey: String,
-    val driverKey: String? // null = no named driver line
-)
-
-@Composable
-private fun VerifiedFleetRow(entry: VerifiedFleetEntry) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF2C2C2E), RoundedCornerShape(10.dp))
-            .padding(12.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = str(entry.lorryKey),
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 19.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Box(
-                modifier = Modifier
-                    .background(Color(0xFFE8F5E9), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = str(entry.badgeKey),
-                    color = Color(0xFF1B5E20),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = str(entry.statusKey),
-                color = Color(0xFF81C784),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-            val driverKey = entry.driverKey
-            if (driverKey != null) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = str(driverKey),
-                    color = Color(0xFFE6B325),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-}
-
-/**
  * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
  *
  * Real-Time Lorry & Logistics Tracker: county-bound availability board.
@@ -745,28 +682,6 @@ private fun LogisticsTrackerComponent(
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))
-            // 🛡️ VERIFIED FLEET — anti-fraud checked showcase rows (demo entries).
-            val verifiedFleet = remember {
-                listOf(
-                    VerifiedFleetEntry("logi_lorry1", "logi_lorry1_badge", "logi_lorry1_status", "logi_lorry1_driver"),
-                    VerifiedFleetEntry("logi_lorry2", "logi_lorry2_badge", "logi_lorry2_status", null)
-                )
-            }
-            Text(
-                text = str("logi_verified_h"),
-                color = Color(0xFFE6B325),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = str("logi_demo_note"),
-                color = Color.Gray,
-                fontSize = 11.sp,
-                fontStyle = FontStyle.Italic
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            verifiedFleet.forEach { entry -> VerifiedFleetRow(entry) }
             Button(
                 onClick = { onContactDriver(firstPhone) },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -4211,6 +4126,10 @@ fun PremiumMarketAnalyzerScreen(
                                 }
                             }
                         }
+                        // Live vetted directory only: demo placeholder rows were purged,
+                        // so this section renders exclusively from driver submissions.
+                        val demoTransporters = remember(selectedCounty) { MarketDataRepository.getTransporters(selectedCounty) }
+                        if (demoTransporters.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             str("lorry_demo"),
@@ -4218,7 +4137,7 @@ fun PremiumMarketAnalyzerScreen(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        MarketDataRepository.getTransporters(selectedCounty).forEach { transporter ->
+                        demoTransporters.forEach { transporter ->
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(
                                 modifier = Modifier
@@ -4270,6 +4189,7 @@ fun PremiumMarketAnalyzerScreen(
                                     }
                                 }
                             }
+                        }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
