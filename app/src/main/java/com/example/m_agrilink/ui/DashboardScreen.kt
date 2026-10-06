@@ -618,6 +618,73 @@ private fun formatQty(qty: Double): String =
     else "%.1f".format(java.util.Locale.US, qty)
 
 /**
+ * PestOutbreakAlertBanner: county-driven regional biosecurity state machine.
+ * Baringo flashes amber (Desert Locust), Tana River flashes crimson (Mango
+ * Seed Weevil), and all other counties hold the green KALRO MLND seasonal
+ * monitor. A soft infinite alpha pulse keeps the capsule eye-catching;
+ * vertical-only flow, no fixed heights, zero overlap risk.
+ */
+@Composable
+private fun PestOutbreakAlertBanner(selectedCounty: String) {
+    val county = selectedCounty.trim()
+    val container: Color
+    val content: Color
+    val messageKey: String
+    when {
+        county.equals("Baringo", ignoreCase = true) -> {
+            container = Color(0xFFFFA000)
+            content = Color.Black
+            messageKey = "pest_baringo"
+        }
+        county.equals("Tana River", ignoreCase = true) -> {
+            container = Color(0xFFDC2626)
+            content = Color.White
+            messageKey = "pest_tana"
+        }
+        else -> {
+            container = Color(0xFFE8F5E9)
+            content = Color(0xFF1B5E20)
+            messageKey = "pest_default"
+        }
+    }
+    val pulse = rememberInfiniteTransition(label = "pestAlertPulse")
+    val pulseAlpha by pulse.animateFloat(
+        initialValue = 0.7f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pestAlertAlpha"
+    )
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(pulseAlpha)
+                .background(container, CircleShape)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = str(messageKey),
+                color = content,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = str("pest_bio_tag"),
+            color = Color.Gray,
+            fontSize = 10.sp,
+            lineHeight = 14.sp
+        )
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+}
+
+/**
  * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
  *
  * Dynamic SACCO & Input Pricing Planner: certified-input price grid plus an
@@ -1920,6 +1987,9 @@ fun PremiumMarketAnalyzerScreen() {
                 Spacer(modifier = Modifier.height(4.dp))
             }
         }
+
+        // --- 1-i. NATIONAL BIOSECURITY ALERT CAPSULE (county-driven pest monitor) ---
+        PestOutbreakAlertBanner(selectedCounty = selectedCounty)
 
         // Bottom-bar dialogs (mobile sheets replacing the old header buttons).
         if (navExpanded) {
