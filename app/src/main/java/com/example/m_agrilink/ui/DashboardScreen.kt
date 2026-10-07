@@ -12,7 +12,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShowChart
@@ -46,7 +45,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1233,7 +1231,8 @@ private fun accountInitials(name: String): String {
 @Composable
 private fun ActiveAccountHud(
     displayName: String,
-    displayEmail: String
+    displayEmail: String,
+    onLogout: () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
     val safeName = displayName.ifBlank { "Leshan Levi" }
@@ -1328,6 +1327,26 @@ private fun ActiveAccountHud(
                         lineHeight = 14.sp,
                         color = Color.Gray
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onLogout,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            text = "\uD83D\uDEAA Log Out",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFB71C1C)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Tapping Log Out clears their session so they sign in again next time.",
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        color = Color.Gray
+                    )
                 }
             }
         }
@@ -1338,7 +1357,9 @@ private fun ActiveAccountHud(
 @Composable
 fun DashboardScreen(
     displayName: String = "Leshan Levi",
-    displayEmail: String = "levislekesio@gmail.com"
+    displayEmail: String = "levislekesio@gmail.com",
+    onLogout: () -> Unit = {},
+    onOpenScanner: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(false) }
@@ -1355,7 +1376,6 @@ fun DashboardScreen(
     }
     var farmerPlantedCrop by rememberSaveable { mutableStateOf("") }
     var showShambaChat by rememberSaveable { mutableStateOf(false) }
-    var showScanner by rememberSaveable { mutableStateOf(false) }
 
     // --- TOP ACTION BAR STATE MACHINE (thread-safe Compose state) ---
     // Account creation lives only in AuthOnboardingScreen (app boot entry);
@@ -1513,11 +1533,10 @@ fun DashboardScreen(
         }
     }
 
-    // System back button: step back through scanner -> chat -> market/weather/articles pages
+    // System back button: step back through chat -> market/weather/articles pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = showScanner || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "articles") {
+    BackHandler(enabled = showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "articles") {
         when {
-            showScanner -> showScanner = false
             showShambaChat -> showShambaChat = false
             activeViewport == "weather" || activeViewport == "market" || activeViewport == "articles" -> activeViewport = "home"
         }
@@ -1577,10 +1596,6 @@ fun DashboardScreen(
     }
 
     Scaffold(
-        floatingActionButton = {
-            // Persistent bottom-right Shamba AI avatar bubble (all viewports).
-            ScannerAvatarFab(onClick = { showScanner = true })
-        },
         bottomBar = {
             // Mobile-style 3-button bottom navigation: Navigate • Language • Settings.
             NavigationBar(
@@ -1652,7 +1667,8 @@ fun DashboardScreen(
                     )
                     ActiveAccountHud(
                         displayName = displayName,
-                        displayEmail = displayEmail
+                        displayEmail = displayEmail,
+                        onLogout = onLogout
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -2534,43 +2550,69 @@ fun DashboardScreen(
                 }
             }
 
-            // --- 3A. AI SCANNER OVERLAY (FAB-launched diagnostics workspace) ---
-            // The static inline scanner block was removed to slim the page;
-            // the avatar FAB opens this full workspace overlay instead.
-            if (showScanner) {
-                Dialog(
-                    onDismissRequest = { showScanner = false },
-                    properties = DialogProperties(usePlatformDefaultWidth = false)
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F6F8)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            AiScannerScreen(
-                                selectedCounty = selectedCounty,
-                                farmerPlantedCrop = farmerPlantedCrop,
-                                textToSpeech = textToSpeech,
-                                liveLookup = liveLookup,
-                                onOpenWebLink = { openWebLink(it) },
-                                modifier = Modifier.fillMaxWidth()
+            // --- 3A. SHAMBA AI DIAGNOSTIC COMPANION (stationary cockpit card) ---
+            // Field-green glassmorphism entry: the floating avatar bubble and
+            // its overlay were purged; this card routes to the scanner graph.
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(6.dp, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color(0xFF1B4332), Color(0xFF2D6A4F))
                             )
-                            IconButton(
-                                onClick = { showScanner = false },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(12.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = "Close scanner",
-                                    tint = if (isDarkTheme) Color.White else Color.Black
-                                )
-                            }
+                        )
+                        .padding(20.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .border(2.dp, Color(0xFFE6B325), CircleShape)
+                    ) {
+                        Text(
+                            text = "\uD83C\uDF3E",
+                            fontSize = 28.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "\uD83E\uDD16 Shamba AI Diagnostic Companion",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "They point their lens at any leaf and their companion reads it for them.",
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            color = Color(0xFFD8F3DC)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = onOpenScanner,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE6B325),
+                                contentColor = Color(0xFF1B4332)
+                            )
+                        ) {
+                            Text(
+                                "Launch Intelligent AI Scan",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
                         }
                     }
                 }
@@ -2676,7 +2718,7 @@ fun DashboardScreen(
 // CRITICAL SPACER BUFFER: Prevents layout elements from crashing into the bottom tab bar icons
             Spacer(modifier = Modifier.height(100.dp))
             Text(
-                text = "M-AgriLink Identity Protection System — Configured and Supervised by Lead System Architect Levis Lekesio.",
+                text = "M-AgriLink Identity & Security Core — Programmed and Supervised by Lead System Architect Levis Lekesio. All Rights Reserved.",
                 fontSize = 10.sp,
                 lineHeight = 14.sp,
                 color = Color.Gray,
