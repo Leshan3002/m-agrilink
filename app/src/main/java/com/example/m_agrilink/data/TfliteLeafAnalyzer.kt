@@ -223,7 +223,7 @@ object TfliteLeafAnalyzer {
                 brightness01 = 0f,
                 greenRatio = 0f,
                 sharpness = 0f,
-                guidance = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady your Lenovo camera device and try again."
+                guidance = "⚠️ Scanner Alert: Leaf frame parsing failed due to suboptimal lighting conditions or hardware focus latency. Please steady the camera device and try again."
             )
         }
     }

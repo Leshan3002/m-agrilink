@@ -417,7 +417,7 @@ fun WeatherTerminalScreen(
             title = { Text("Location Access", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "🗺️ Allow M-AgriLink to Access Location? We require precise GPS synchronization to pull live Open-Meteo climate tracking maps, real-time localized rain curves, and specialized crop alerts for your specific county."
+                    "🗺️ Allow M-AgriLink to Access Location? We require precise GPS synchronization to pull live Open-Meteo climate tracking maps, real-time localized rain curves, and specialized crop alerts for their specific county."
                 )
             },
             confirmButton = {

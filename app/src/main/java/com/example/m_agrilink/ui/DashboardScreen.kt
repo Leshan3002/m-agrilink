@@ -69,11 +69,9 @@ import com.example.m_agrilink.data.FrameQuality
 import com.example.m_agrilink.data.FrameRejectReason
 import com.example.m_agrilink.ui.components.HiveJournalComponent
 import com.example.m_agrilink.data.local.CookieConsentManager
-import com.example.m_agrilink.data.local.FarmerProfile
 import com.example.m_agrilink.data.local.UserInterestTracker
 import com.example.m_agrilink.domain.RoomFarmerAccountRepository
 import com.example.m_agrilink.network.CropLiveLookup
-import android.accounts.AccountManager
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1236,9 +1234,9 @@ fun DashboardScreen() {
     var farmerPlantedCrop by rememberSaveable { mutableStateOf("") }
     var showShambaChat by rememberSaveable { mutableStateOf(false) }
 
-    // --- TOP ACTION BAR + ACCOUNT STATE MACHINE (thread-safe Compose state) ---
-    var isUserLoggedIn by rememberSaveable { mutableStateOf(false) }
-    var usernameInput by rememberSaveable { mutableStateOf("") }
+    // --- TOP ACTION BAR STATE MACHINE (thread-safe Compose state) ---
+    // Account creation lives only in AuthOnboardingScreen (app boot entry);
+    // the dashboard keeps no duplicate account page.
     var isDarkTheme by rememberSaveable { mutableStateOf(false) }
     var selectedLanguage by rememberSaveable { mutableStateOf("English") }
     // Language picker drives every Dashboard string via AppLocale.
@@ -1250,16 +1248,6 @@ fun DashboardScreen() {
     var cacheNotice by remember { mutableStateOf<String?>(null) }
     // Market page crop focus (deep-linked from recents / My Crops).
     var marketCropFilter by rememberSaveable { mutableStateOf("All") }
-    // --- SERIOUS ACCOUNT + COOKIE CONSENT STATE ---
-    var profile by remember { mutableStateOf<FarmerProfile?>(null) }
-    var profileEmail by rememberSaveable { mutableStateOf("") }
-    var profilePhone by rememberSaveable { mutableStateOf("") }
-    var profileAcreage by rememberSaveable { mutableStateOf("1.0") }
-    var showEditProfile by remember { mutableStateOf(false) }
-    var showGoogleLink by remember { mutableStateOf(false) }
-    var googleEmailInput by rememberSaveable { mutableStateOf("") }
-    var googleNameInput by rememberSaveable { mutableStateOf("") }
-    var accountError by remember { mutableStateOf<String?>(null) }
     // Cookie consent (asked on first launch, Settings anytime).
     var consentState by remember { mutableStateOf(CookieConsentManager.ConsentState()) }
     var showCookieBanner by remember { mutableStateOf(false) }
@@ -1352,7 +1340,7 @@ fun DashboardScreen() {
         if (q.isEmpty()) counties else counties.filter { it.contains(q, ignoreCase = true) }
     }
 
-    // --- ACCOUNT + LIVE LOOKUP RUNTIME (Room ACID profile, Gemini-first briefs) ---
+    // --- LIVE LOOKUP RUNTIME (Room-backed history, Gemini-first briefs) ---
     val scope = rememberCoroutineScope()
     val accountRepo = remember(context) { RoomFarmerAccountRepository(context.applicationContext) }
     val cookieManager = remember(context) { CookieConsentManager(context.applicationContext) }
@@ -1402,35 +1390,23 @@ fun DashboardScreen() {
         }
     }
 
-    // System back button: step back through scanner -> chat -> market/weather/articles/account pages
+    // System back button: step back through scanner -> chat -> market/weather/articles pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles") {
+    BackHandler(enabled = showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "articles") {
         when {
             showShambaChat -> showShambaChat = false
-            activeViewport == "weather" || activeViewport == "market" || activeViewport == "account" || activeViewport == "articles" -> activeViewport = "home"
+            activeViewport == "weather" || activeViewport == "market" || activeViewport == "articles" -> activeViewport = "home"
         }
     }
 
     LaunchedEffect(Unit) {
         cropHistory = try { accountRepo.recentCrops() } catch (e: Exception) { listOf() }
-        // Restore serious profile + ask cookies on first launch.
+        // Restore saved county preference + ask cookies on first launch.
         try {
             val p = accountRepo.ensureGuestProfile()
-            profile = p
-            usernameInput = p.displayName.takeIf { it != "Guest Farmer" } ?: usernameInput
             selectedCounty = p.county.takeIf { it.isNotBlank() }?.let {
                 if (selectedCounty.isBlank()) it else selectedCounty
             } ?: selectedCounty
-            profileEmail = p.email
-            profilePhone = p.phone
-            profileAcreage = p.acreage.toString()
-            isUserLoggedIn = p.displayName != "Guest Farmer" || p.authProvider == "google"
-            // Pre-fill Gmail suggestion from device Google accounts.
-            try {
-                val am = AccountManager.get(context.applicationContext)
-                val google = am.getAccountsByType("com.google").firstOrNull()?.name ?: ""
-                if (googleEmailInput.isBlank() && google.contains("@")) googleEmailInput = google
-            } catch (e: Exception) { }
         } catch (e: Exception) { }
         refreshConsent()
         showCookieBanner = cookieManager.needsBanner()
@@ -1463,7 +1439,7 @@ fun DashboardScreen() {
         val (text, source) = try {
             liveLookup.lookupCrop(query, countyOrDefault, activeTemperature, activeHumidity, activeWindSpeed)
         } catch (e: Exception) {
-            "Live lookup failed. Check your connection and try again." to "OFFLINE"
+            "Live lookup failed. Check the connection and try again." to "OFFLINE"
         }
         if (requestKey == CropNameNormalizer.canonicalOrOriginal(farmerPlantedCrop).lowercase()) {
             liveBrief = text
@@ -1483,7 +1459,7 @@ fun DashboardScreen() {
                 containerColor = if (isDarkTheme) Color(0xFF1E1E1E) else Color.White
             ) {
                 NavigationBarItem(
-                    selected = activeViewport == "market" || activeViewport == "weather" || activeViewport == "account",
+                    selected = activeViewport == "market" || activeViewport == "weather",
                     onClick = { navExpanded = true },
                     icon = { Text("🌐", fontSize = 20.sp) },
                     label = { Text(str("tab_navigate"), fontSize = 11.sp) }
@@ -1546,23 +1522,6 @@ fun DashboardScreen() {
                         color = Color(0xFFF2E6E6),
                         modifier = Modifier.weight(1f).padding(end = 8.dp)
                     )
-                    if (isUserLoggedIn) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Color.White)
-                                .border(1.dp, Color(0xFFE6B325), RoundedCornerShape(20.dp))
-                                .clickable { activeViewport = "account" }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = "👨‍🌾 Levis Lekesio (Developer Hub / Farmer Profile)",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                            )
-                        }
-                    }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -1619,7 +1578,6 @@ fun DashboardScreen() {
                         navOption("nav_market", "market")
                         navOption("nav_weather", "weather")
                         navOption("nav_articles", "articles")
-                        navOption("nav_account", "account")
                     }
                 },
                 confirmButton = { TextButton(onClick = { navExpanded = false }) { Text(str("dlg_close"), color = Color.Gray) } },
@@ -1701,243 +1659,6 @@ fun DashboardScreen() {
         Column(modifier = Modifier.padding(16.dp)) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // --- 1B. SERIOUS FARMER ACCOUNT HUB (own page: editable profile + Google + cookies) ---
-            // Account UI lives ONLY on the Account viewport — never on top of Home.
-            if (activeViewport == "account") {
-                Button(
-                    onClick = { activeViewport = "home" },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1E))
-                ) {
-                    Text("← Back to Home Dashboard", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                if (accountError != null) {
-                    Text(accountError ?: "", fontSize = 12.sp, color = Color(0xFFB71C1C), modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-                }
-            if (!isUserLoggedIn) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(4.dp, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text(
-                            text = str("acct_title"),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2C2C2E)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = strf("acct_desc", selectedLanguage),
-                            fontSize = 13.sp,
-                            color = Color.DarkGray
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = usernameInput,
-                            onValueChange = { usernameInput = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text(str("acct_name_hint"), color = Color.Gray) },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = {
-                                val name = usernameInput.trim()
-                                if (name.isBlank()) {
-                                    accountError = tr("err_name_empty")
-                                    return@Button
-                                }
-                                accountError = null
-                                scope.launch {
-                                    try {
-                                        accountRepo.ensureGuestProfile()
-                                        accountRepo.saveDisplayName(name)
-                                        if (selectedCounty.isNotBlank()) accountRepo.updateCounty(selectedCounty)
-                                        profile = accountRepo.getProfile()
-                                        isUserLoggedIn = true
-                                    } catch (e: Exception) {
-                                        accountError = trf("err_create_failed", e.message ?: "try again")
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                        ) {
-                            Text(str("acct_create"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = { showGoogleLink = true },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(str("acct_google"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E3A8A))
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = {
-                            tmpAnalytics = consentState.analytics
-                            tmpPersonalization = consentState.personalization
-                            tmpMarketing = consentState.marketing
-                            showCookieSettings = true
-                        }) {
-                            Text(
-                                strf("acct_cookie_line", consentState.choice),
-                                fontSize = 12.sp, color = Color(0xFF1E3A8A)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = str("acct_locked1"),
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
-                            color = Color.Gray
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            } else {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(4.dp, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        val name = profile?.displayName?.ifBlank { usernameInput.trim().ifBlank { "Farmer" } } ?: usernameInput.trim().ifBlank { "Farmer" }
-                        val providerTag = if (profile?.authProvider == "google") str("farm_google_tag") else ""
-                        Text(
-                            text = strf("farm_title", name, providerTag),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2C2C2E)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = strf("farm_meta", profile?.county?.ifBlank { selectedCounty.ifBlank { "Kenya" } } ?: selectedCounty.ifBlank { "Kenya" }, cropHistory.size, selectedLanguage),
-                            fontSize = 12.sp,
-                            color = Color.DarkGray
-                        )
-                        if (!profile?.email.isNullOrBlank()) {
-                            Text("✉️ ${profile?.email}", fontSize = 12.sp, color = Color.DarkGray)
-                        }
-                        if (!profile?.phone.isNullOrBlank()) {
-                            Text("📞 ${profile?.phone} • ${profile?.acreage ?: 1.0} acres", fontSize = 12.sp, color = Color.DarkGray)
-                        }
-                        if (consentState.personalization && interestSummary.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Box(
-                                modifier = Modifier.fillMaxWidth()
-                                    .background(Color(0xFFE8F5E9), RoundedCornerShape(10.dp))
-                                    .padding(10.dp)
-                            ) {
-                                Text(strf("farm_foryou", interestSummary), fontSize = 12.sp, lineHeight = 17.sp, color = Color(0xFF1B5E20), fontWeight = FontWeight.Medium)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedButton(
-                            onClick = {
-                                marketCropFilter = "All"
-                                activeViewport = "market"
-                            },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(str("farm_crops_btn"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-                        }
-                        if (cropHistory.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = strf("farm_recent", cropHistory.take(3).joinToString(", ")),
-                                fontSize = 11.sp,
-                                color = Color.Gray
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { showEditProfile = true },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text(str("farm_edit"), fontSize = 12.sp, color = Color.Black)
-                            }
-                            OutlinedButton(
-                                onClick = { showGoogleLink = true },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text(if (profile?.authProvider == "google") str("farm_google_ok") else str("farm_link_google"), fontSize = 12.sp, color = Color(0xFF1E3A8A))
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { isUserLoggedIn = false },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text(str("farm_signout"), fontSize = 12.sp, color = Color.Black)
-                            }
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        try {
-                                            accountRepo.clearLocalData()
-                                            try { interestTracker.clear() } catch (e: Exception) { }
-                                        } catch (e: Exception) {
-                                        }
-                                        cropHistory = listOf()
-                                        usernameInput = ""
-                                        profile = null
-                                        farmerPlantedCrop = ""
-                                        marketCropFilter = "All"
-                                        isUserLoggedIn = false
-                                    }
-                                }
-                            ) {
-                                Text(str("farm_delete"), fontSize = 12.sp, color = Color(0xFFB71C1C))
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        TextButton(onClick = {
-                            tmpAnalytics = consentState.analytics
-                            tmpPersonalization = consentState.personalization
-                            tmpMarketing = consentState.marketing
-                            showCookieSettings = true
-                        }) {
-                            Text(
-                                strf("farm_cookie_line", consentState.choice, if (consentState.personalization) str("farm_cookie_personal") else str("farm_cookie_generic")),
-                                fontSize = 11.sp, color = Color(0xFF1E3A8A)
-                            )
-                        }
-                        Text(
-                            text = str("acct_locked2"),
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp,
-                            color = Color.Gray
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-            }
-
-            // Cookie consent banner (first launch) + settings sheet.
             if (showCookieBanner) {
                 AlertDialog(
                     onDismissRequest = { },
@@ -2018,92 +1739,6 @@ fun DashboardScreen() {
                     shape = RoundedCornerShape(16.dp)
                 )
             }
-            if (showEditProfile) {
-                AlertDialog(
-                    onDismissRequest = { showEditProfile = false },
-                    title = { Text(str("ep_title"), fontWeight = FontWeight.Bold) },
-                    text = {
-                        Column {
-                            OutlinedTextField(value = usernameInput, onValueChange = { usernameInput = it }, label = { Text(str("ep_name")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = profileEmail, onValueChange = { profileEmail = it }, label = { Text(str("ep_email")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = profilePhone, onValueChange = { profilePhone = it }, label = { Text(str("ep_phone")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = profileAcreage, onValueChange = { profileAcreage = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text(str("ep_acre")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(str("ep_county_note"), fontSize = 11.sp, color = Color.Gray)
-                            if (accountError != null) { Text(accountError ?: "", fontSize = 12.sp, color = Color(0xFFB71C1C)) }
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                val acres = profileAcreage.toDoubleOrNull()
-                                if (usernameInput.trim().isBlank()) { accountError = tr("ep_err_name"); return@Button }
-                                if (profileEmail.isNotBlank() && !profileEmail.contains("@")) { accountError = tr("ep_err_email"); return@Button }
-                                if (acres == null || acres <= 0) { accountError = tr("ep_err_acre"); return@Button }
-                                accountError = null
-                                scope.launch {
-                                    try {
-                                        accountRepo.updateFullProfile(usernameInput.trim(), profileEmail.trim(), profilePhone.trim(), selectedCounty.ifBlank { profile?.county ?: "Baringo" }, acres)
-                                        profile = accountRepo.getProfile()
-                                        showEditProfile = false
-                                    } catch (e: Exception) { accountError = trf("ep_save_fail", e.message ?: "try again") }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                        ) { Text(str("ep_save"), color = Color.White, fontWeight = FontWeight.Bold) }
-                    },
-                    dismissButton = { TextButton(onClick = { showEditProfile = false }) { Text(str("dlg_cancel"), color = Color.Gray) } },
-                    containerColor = Color.White,
-                    shape = RoundedCornerShape(16.dp)
-                )
-            }
-            if (showGoogleLink) {
-                AlertDialog(
-                    onDismissRequest = { showGoogleLink = false },
-                    title = { Text(str("gl_title"), fontWeight = FontWeight.Bold) },
-                    text = {
-                        Column {
-                            Text(str("gl_text"), fontSize = 13.sp, lineHeight = 18.sp)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = googleEmailInput, onValueChange = { googleEmailInput = it }, label = { Text(str("gl_email")) }, placeholder = { Text(str("gl_email_hint")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = googleNameInput, onValueChange = { googleNameInput = it }, label = { Text(str("gl_display")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            if (accountError != null) { Text(accountError ?: "", fontSize = 12.sp, color = Color(0xFFB71C1C)) }
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                val email = googleEmailInput.trim()
-                                if (!email.contains("@") || !email.endsWith("gmail.com", ignoreCase = true)) {
-                                    accountError = tr("gl_err")
-                                    return@Button
-                                }
-                                accountError = null
-                                val display = googleNameInput.trim().ifBlank { usernameInput.trim().ifBlank { email.substringBefore("@") } }
-                                scope.launch {
-                                    try {
-                                        accountRepo.linkGoogleAccount(email.lowercase(), email, display, null)
-                                        profile = accountRepo.getProfile()
-                                        usernameInput = display
-                                        isUserLoggedIn = true
-                                        showGoogleLink = false
-                                    } catch (e: Exception) { accountError = trf("gl_fail", e.message ?: "try again") }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A))
-                        ) { Text(str("gl_save"), color = Color.White, fontWeight = FontWeight.Bold) }
-                    },
-                    dismissButton = { TextButton(onClick = { showGoogleLink = false }) { Text(str("dlg_cancel"), color = Color.Gray) } },
-                    containerColor = Color.White,
-                    shape = RoundedCornerShape(16.dp)
-                )
-            }
-
-            // --- 1C. TIP OF THE DAY (retention: fresh value every open) ---
             run {
                 val farmTips = listOf(
                     tr("tip_1"),
@@ -2143,7 +1778,6 @@ fun DashboardScreen() {
                 text = when (activeViewport) {
                     "market" -> strf("vp_market", selectedLanguage)
                     "weather" -> strf("vp_weather", selectedLanguage)
-                    "account" -> strf("vp_account", selectedLanguage)
                     "articles" -> strf("vp_articles", selectedLanguage)
                     else -> strf("vp_home", selectedLanguage)
                 },
@@ -2208,7 +1842,7 @@ fun DashboardScreen() {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
-            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "account" && activeViewport != "articles") {
+            if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "articles") {
 
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
@@ -2878,10 +2512,11 @@ fun DashboardScreen() {
                 color = Color.White
             )
         }
-// ⚠️ CRITICAL SPACER BUFFER: Prevents layout elements from crashing into your bottom tab bar icons
+// CRITICAL SPACER BUFFER: Prevents layout elements from crashing into the bottom tab bar icons
             Spacer(modifier = Modifier.height(100.dp))
             } // end home-page widgets (weather lives on its own page)
         }
     }
     }
 }
+

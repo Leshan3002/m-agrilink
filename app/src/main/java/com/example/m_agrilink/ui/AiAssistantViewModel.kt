@@ -200,7 +200,7 @@ class AiAssistantViewModel : ViewModel() {
         }
         if (record != null) {
             val grounded = MarketDataRepository.getPestAdvisory(record.cropName).cardLines().joinToString(" ")
-            return "🤖 Shamba Assistant (Offline Mode): I've detected you are managing " +
+            return "🤖 Shamba Assistant (Offline Mode): I've detected they are managing " +
                 "${record.cropName} in $county with limited connectivity. " +
                 "🌱 What it is: likely early pest/disease pressure — scout both sides of leaves, stems and buds twice weekly. " +
                 "🚜 Immediate Action: ${record.advisory.plantingSpacing} " +
@@ -209,12 +209,12 @@ class AiAssistantViewModel : ViewModel() {
                 "💰 Local market: KES ${record.localPriceKes} → hub KES ${record.hubPriceKes} " +
                 "(net +KES ${record.netMarginKes} per bag). " +
                 grounded + " " +
-                "⚠️ Danger signs: spreading spots/holes, wilting, or pests on most plants — call your agrovet immediately. " +
+                "⚠️ Danger signs: spreading spots/holes, wilting, or pests on most plants — call their agrovet immediately. " +
                 "Next season: rotate crops, clear debris, and mulch to prevent repeat attacks."
         }
-        return "🤖 Shamba Assistant (Offline Mode): I've detected you are managing a " +
+        return "🤖 Shamba Assistant (Offline Mode): I've detected they are managing a " +
             "$crop orchard in $county with limited connectivity. Based on localized KALRO " +
-            "data, your main priority right now is scouting twice weekly for pest vectors, " +
+            "data, their main priority right now is scouting twice weekly for pest vectors, " +
             "hanging monitoring traps at canopy level, and clearing fallen fruits and debris " +
             "to break pest lifecycles. Hold harvested produce under the 13.5% moisture ceiling " +
             "before storage. " +
