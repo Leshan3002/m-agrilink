@@ -33,7 +33,7 @@ import com.example.m_agrilink.ui.theme.MAgriLinkTheme
 import kotlinx.coroutines.launch
 
 /**
- * M-AgriLink Navigation Engine — Programmed and Configured by Lead System Architect Levis Lekesio.
+ * M-AgriLink Navigation Engine.
  *
  * Central layout navigation graph:
  *  Route A "auth_onboarding" -> AuthOnboardingScreen() boot landing page.

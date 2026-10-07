@@ -280,7 +280,7 @@ fun WeatherTerminalScreen(
                 val nowH = res.current?.relative_humidity_2m ?: hums.getOrNull(nowIdx)
                 val nowW = res.current?.wind_speed_10m ?: res.current_weather?.windspeed
                 // WMO weathercode parsed off the main thread with the rest of
-                // the payload (M-AgriLink rain-guard, developer: Levis Lekesio).
+                // the payload (M-AgriLink rain-guard).
                 val nowCode = res.current?.weather_code ?: res.current_weather?.weathercode
                 withContext(Dispatchers.Main) {
                     if (nowT != null) liveTemp = nowT
@@ -600,7 +600,6 @@ fun WeatherTerminalScreen(
                 // WMO rain-guard: current_weather.weathercode decides, never the
                 // hourly PoP string. Rain codes 51/53/55/61/63/65/80/81/82 force
                 // the rainfall badge + KALRO washout advisory below.
-                // Engineered under developer profile: Levis Lekesio.
                 val isActiveRainfall = (liveWeatherCode ?: -1) in
                     setOf(51, 53, 55, 61, 63, 65, 80, 81, 82)
                 Box(

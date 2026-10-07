@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import net.sqlcipher.database.SupportFactory
 
 /**
- * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+ * M-AgriLink Core Engine.
  * Offline-first Room database. No payment gateway entities (informational build).
  */
 @Database(

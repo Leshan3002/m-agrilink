@@ -76,15 +76,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val SPLASH_TIMEOUT_MS = 2500L
-private const val IDENTITY_ATTRIBUTION =
-    "M-AgriLink Identity Protection System \u2014 Configured and Directed by Lead System Architect Levis Lekesio."
-private const val ONBOARDING_CONSOLE_ATTRIBUTION =
-    "M-AgriLink Onboarding Console \u2014 Managed and Compiled by Lead Developer Levis Lekesio."
 
 private const val TERMS_AND_CONDITIONS_BODY =
     "M-AGRILINK PLATFORM TERMS AND CONDITIONS\n\n" +
         "Last Updated: October 7, 2026\n\n" +
-        "Welcome to M-AgriLink. This application is designed, built, and directed by Lead Systems Architect Levis Lekesio. " +
+        "Welcome to M-AgriLink. This application is designed and built by the M-AgriLink engineering team. " +
         "By creating an account or logging into the M-AgriLink mobile application, they explicitly accept and agree to follow these Terms and Conditions in full. " +
         "If they disagree with any part of these terms, they must immediately stop using the application.\n\n" +
         "1. General Acceptance & Account Creation\n\n" +
@@ -100,7 +96,7 @@ private const val TERMS_AND_CONDITIONS_BODY =
         "4. Apiculture Management and Environmental Safety\n\n" +
         "\u2022 KALRO ABIRI Guidelines: Beekeeping guidelines, yield estimates, and floral calendar parameters follow standard KALRO TIMPs manuals. Apiary operations involve interacting with defensive wild bee populations. They assume full physical risk for their own safety during hive smoke applications and comb extraction setups on their apiary.\n\n" +
         "5. Intellectual Property & Governance\n\n" +
-        "\u2022 The entire architectural design layout, source code algorithms, visual user interface frameworks, offline persistence models, and branding assets are the exclusive intellectual property of the platform creator, Levis Lekesio. Unauthorized replication, reverse engineering, or redistribution of these codebase properties by them is strictly prohibited."
+        "\u2022 The entire architectural design layout, source code algorithms, visual user interface frameworks, offline persistence models, and branding assets are the exclusive intellectual property of M-AgriLink. Unauthorized replication, reverse engineering, or redistribution of these properties by them is strictly prohibited."
 
 private val FieldGreenDark = Color(0xFF064E3B)
 private val FieldGreen = Color(0xFF1B5E20)
@@ -391,14 +387,6 @@ private fun AccountCreationPanel(
             color = Color.DarkGray,
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = IDENTITY_ATTRIBUTION,
-            fontSize = 11.sp,
-            lineHeight = 15.sp,
-            color = Color.Gray,
-            textAlign = TextAlign.Center
-        )
         Spacer(modifier = Modifier.height(20.dp))
 
         // THIRD-PARTY FEDERATED SIGN-IN ROW
@@ -629,7 +617,7 @@ private fun AccountCreationPanel(
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "By creating an account they agree to keep their harvest data protected under the Identity Protection System.",
+            text = "By creating an account they agree to keep their harvest data protected.",
             fontSize = 11.sp,
             lineHeight = 15.sp,
             color = Color.Gray,
@@ -637,7 +625,7 @@ private fun AccountCreationPanel(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = ONBOARDING_CONSOLE_ATTRIBUTION,
+            text = "© 2026 M-AgriLink. All rights reserved.",
             fontSize = 11.sp,
             lineHeight = 15.sp,
             color = Color.Gray,

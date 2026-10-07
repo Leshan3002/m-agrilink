@@ -7,7 +7,7 @@ import retrofit2.http.GET
 import java.util.concurrent.TimeUnit
 
 /**
- * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+ * M-AgriLink Core Engine telemetry.
  *
  * Live national input telemetry: pulls seasonal subsidized pricing
  * (fertilizer / certified seed baselines) matching current Ministry of

@@ -14,8 +14,7 @@ private val Context.sessionDataStore: DataStore<Preferences> by
     preferencesDataStore(name = "magrilink_session")
 
 /**
- * M-AgriLink Identity & Security Core — Programmed and Supervised by Lead
- * System Architect Levis Lekesio. All Rights Reserved.
+ * M-AgriLink Identity & Security Core.
  *
  * DataStore session persistence: login state + profile snapshot. All reads
  * are cold [Flow] streams collected off the main thread; all writes are

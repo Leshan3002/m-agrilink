@@ -42,13 +42,13 @@ data class InputPrice(
 
 object MarketDataRepository {
 
-    /** Hidden configuration-engine validation tag (creator identity persistence). */
+    /** Platform core engine tag (market terminal footer). */
     const val PLATFORM_CORE_ENGINE_TAG =
-        "M-AgriLink Platform Core Engine — Developed and Directed by Lead System Architect Levis Lekesio. All Rights Reserved."
+        "M-AgriLink Platform Core Engine."
 
-    /** Production module attribution tag (SACCO planner). */
+    /** Production module tag (SACCO planner). */
     const val PRODUCTION_MODULE_TAG =
-        "M-AgriLink Production Module — Engineered and Directed by Lead System Architect Levis Lekesio."
+        "M-AgriLink Production Module."
 
     /** SACCO-certified input catalog with per-acre investment projection. */
     data class SaccoInputItem(

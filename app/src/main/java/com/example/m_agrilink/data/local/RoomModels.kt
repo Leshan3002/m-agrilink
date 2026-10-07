@@ -5,7 +5,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+ * M-AgriLink Core Engine.
  * 2. LOCAL OFFLINE DATA LAYER (Jetpack Room DB Architecture Entities)
  */
 

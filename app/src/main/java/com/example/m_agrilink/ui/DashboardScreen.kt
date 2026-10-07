@@ -80,10 +80,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val ARCHITECT_ATTRIBUTION =
-    "Application Created and Engineered by Lead Architect Levis Lekesio."
+    "M-AgriLink agricultural intelligence platform."
 
 internal const val ADVISORY_FRAMEWORK_ATTRIBUTION =
-    "M-AgriLink Advisory Framework — Directed and Engineered by Lead System Architect Levis Lekesio."
+    "M-AgriLink advisory framework."
 
 private const val VERIFIED_SOURCES_FOOTNOTE =
     "*Verified via KALRO ASAL Research Databases, CABI Plantwise Knowledge Bank, and icipe Kenya.*"
@@ -110,7 +110,7 @@ private fun advisoryField(a: AgronomicAdvisory, field: String): String {
 
 /** Shared TTS locale policy: Swahili voice in Kiswahili mode, else US English. */
 internal fun applyTtsLocale(tts: TextToSpeech) {
-    // M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+    // M-AgriLink Core Engine.
     // Voice follows the Language picker: Kiswahili mode speaks Swahili (sw-KE when
     // the engine has it, else generic Swahili), English mode speaks US English.
     try {
@@ -334,7 +334,7 @@ private fun PestOutbreakAlertBanner(
 }
 
 /**
- * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+ * M-AgriLink Core Engine.
  *
  * Dynamic SACCO & Input Pricing Planner: certified-input price grid plus an
  * interactive acreage calculator with instant investment projections.
@@ -668,7 +668,7 @@ private fun FaqSectionComponent(
             FaqItem(question = str("faq_q4"), answer = str("faq_a4"), textToSpeech = textToSpeech)
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "M-AgriLink Documentation Engine — Managed and Compiled by Lead Developer Levis Lekesio.",
+                text = "© 2026 M-AgriLink. All rights reserved.",
                 color = Color.Gray,
                 fontSize = 10.sp,
                 lineHeight = 14.sp
@@ -1365,7 +1365,7 @@ fun DashboardScreen(
     var expanded by remember { mutableStateOf(false) }
     // Session states survive minimize / rotation / process death.
     var selectedCounty by rememberSaveable { mutableStateOf("") }
-    // M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+    // M-AgriLink Core Engine.
     // Instant county-hub search filter (survives rotation; drives the 47-county list below).
     var countySearchQuery by rememberSaveable { mutableStateOf("") }
     val countyData = remember(selectedCounty) {
@@ -2001,7 +2001,7 @@ fun DashboardScreen(
                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
             )
 
-            // M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+            // M-AgriLink Core Engine.
             // Interactive county-hub search: typing filters the 47-county list instantly.
             OutlinedTextField(
                 value = countySearchQuery,
@@ -2718,7 +2718,7 @@ fun DashboardScreen(
 // CRITICAL SPACER BUFFER: Prevents layout elements from crashing into the bottom tab bar icons
             Spacer(modifier = Modifier.height(100.dp))
             Text(
-                text = "M-AgriLink Identity & Security Core — Programmed and Supervised by Lead System Architect Levis Lekesio. All Rights Reserved.",
+                text = "© 2026 M-AgriLink. All rights reserved.",
                 fontSize = 10.sp,
                 lineHeight = 14.sp,
                 color = Color.Gray,

@@ -27,9 +27,9 @@ class AiAssistantViewModel : ViewModel() {
     private var probeStarted = false
 
     companion object {
-        const val ASSISTANT_IDENTITY = "I'm Shamba, your M-AgriLink farm assistant, developed by Levis Lekesio."
+        const val ASSISTANT_IDENTITY = "I'm Shamba, your M-AgriLink farm assistant."
         const val ADVISORY_FRAMEWORK_CREDIT =
-            "M-AgriLink Advisory Framework — Directed and Engineered by Lead System Architect Levis Lekesio."
+            "M-AgriLink advisory framework."
     }
 
     /** Search links so the farmer can watch/read more (YouTube + Wikipedia). */

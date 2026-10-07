@@ -35,7 +35,6 @@ import java.net.URL
 
 /**
  * M-AgriLink Apiculture Production Module
- * Engineered and Directed by Lead System Architect Levis Lekesio.
  * Verified via KALRO ABIRI Marigat & World Bank KCSAP Guidelines.
  */
 
@@ -50,7 +49,7 @@ private const val GALLERY_PHOTO_CREDIT =
     "Photos: Wikimedia Commons (Alabama Extension / Healthnutlady), CC."
 
 private const val GALLERY_MODULE_TAG =
-    "M-AgriLink Production Module — Engineered and Directed by Lead System Architect Levis Lekesio."
+    "M-AgriLink Production Module."
 
 private val galleryMemoryCache = object : LinkedHashMap<String, Bitmap>(16, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>): Boolean =

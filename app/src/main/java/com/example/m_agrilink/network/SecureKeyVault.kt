@@ -3,7 +3,7 @@ package com.example.m_agrilink.network
 import com.example.m_agrilink.BuildConfig
 
 /**
- * M-AgriLink Core Engine — Engineered and Directed by Lead System Architect Levis Lekesio.
+ * M-AgriLink Core Engine.
  *
  * Encrypted-state memory bucket for the production vision credential.
  * The key is compiled from local.properties (gitignored — never committed,

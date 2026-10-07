@@ -55,6 +55,22 @@ object TfliteLeafAnalyzer {
 
     private const val INPUT_SIZE = 224
 
+    /**
+     * Relaxed frame-gate tolerances (field-flexible pass). These bounds are
+     * deliberately permissive so wide backgrounds and dark borders still
+     * classify instead of bouncing farmers to retake loops — but the floor
+     * is NOT zero: near-black frames still reject, because forcing them
+     * through would bill the Gemini loop for garbage and risk confident,
+     * fabricated pest advisories.
+     */
+    private const val MAX_DARK_FRACTION = 0.92f
+    private const val MIN_MEAN_LUMINANCE = 20.0
+    private const val MAX_BRIGHT_FRACTION = 0.92f
+    private const val MAX_MEAN_LUMINANCE = 240.0
+    private const val MIN_SHARPNESS_STDDEV = 6.0
+    private const val MIN_GREEN_RATIO = 0.20f
+    private const val MIN_DIAGNOSIS_CONFIDENCE = 0.45f
+
     val CLASSES = arrayOf(
         "Healthy",
         "Fall Armyworm damage",
@@ -173,9 +189,9 @@ object TfliteLeafAnalyzer {
             // not green — accept vivid non-green crops when sharp and well lit.
             val produceLike = (rf > 0.32 && rf >= gf * 0.85 && bf < rf) ||
                 (rf + gf > 0.75 && bf < 0.35)
-            val cropLike = greenRatio >= 0.26 || produceLike
+            val cropLike = greenRatio >= MIN_GREEN_RATIO || produceLike
             when {
-                darkFraction > 0.72 || mean < 32.0 -> FrameQuality(
+                darkFraction > MAX_DARK_FRACTION || mean < MIN_MEAN_LUMINANCE -> FrameQuality(
                     usable = false,
                     reason = FrameRejectReason.TOO_DARK,
                     brightness01 = brightness01,
@@ -183,7 +199,7 @@ object TfliteLeafAnalyzer {
                     sharpness = stddev.toFloat(),
                     guidance = "⚠️ Scanner Alert: Frame too dark — no crop detail visible. Clean the lens, turn on the light/flash, and point steady at the crop (leaf, fruit, or stem) filling the frame, then retry."
                 )
-                brightFraction > 0.72 || mean > 228.0 -> FrameQuality(
+                brightFraction > MAX_BRIGHT_FRACTION || mean > MAX_MEAN_LUMINANCE -> FrameQuality(
                     usable = false,
                     reason = FrameRejectReason.TOO_BRIGHT,
                     brightness01 = brightness01,
@@ -191,7 +207,7 @@ object TfliteLeafAnalyzer {
                     sharpness = stddev.toFloat(),
                     guidance = "⚠️ Scanner Alert: Frame washed out by glare. Shade the crop, wipe the lens, hold steady and retry."
                 )
-                stddev < 11.0 -> FrameQuality(
+                stddev < MIN_SHARPNESS_STDDEV -> FrameQuality(
                     usable = false,
                     reason = FrameRejectReason.BLURRY,
                     brightness01 = brightness01,
@@ -238,7 +254,7 @@ object TfliteLeafAnalyzer {
             )
         }
         val result = tryRunTflite(bitmap, interpreter) ?: heuristic(bitmap)
-        if (result.confidence < 0.55f) {
+        if (result.confidence < MIN_DIAGNOSIS_CONFIDENCE) {
             val gated = quality.copy(
                 usable = false,
                 reason = FrameRejectReason.LOW_CONFIDENCE,

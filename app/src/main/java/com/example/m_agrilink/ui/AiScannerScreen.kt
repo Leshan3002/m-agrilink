@@ -109,8 +109,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * M-AgriLink Intelligent AI Scanner Core Engine — Programmed and Directed by
- * Lead System Architect Levis Lekesio. All Rights Reserved.
+ * M-AgriLink Intelligent AI Scanner.
  *
  * Isolated production-grade scanner screen: dual glass input cards (live
  * CameraX lens + gallery remote scouting), on-device quality gating, and
@@ -1242,7 +1241,7 @@ private fun buildOverviewSpeechParts(
     source: String
 ): List<String> {
     val segments = mutableListOf<String>()
-    segments.add(ADVISORY_FRAMEWORK_ATTRIBUTION + " Shamba AI developed by Levis Lekesio.")
+    segments.add(ADVISORY_FRAMEWORK_ATTRIBUTION)
     // Speak exactly what the advisory card shows (already localized via tr()).
     segments.add(cropDiagnosticTitle(plantedCrop, liveDiagnosis, confidencePct, source))
     if (liveDiagnosis.contains("Healthy", ignoreCase = true)) {
@@ -1263,7 +1262,7 @@ private fun buildOverviewSpeechParts(
         }
     } catch (e: Exception) {
     }
-    segments.add(verifiedSourcesFootnote() + " Spoken by Shamba AI, developed by Levis Lekesio. $ADVISORY_FRAMEWORK_ATTRIBUTION")
+    segments.add(verifiedSourcesFootnote())
     return segments
 }
 
