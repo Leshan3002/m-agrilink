@@ -70,6 +70,31 @@ class GeminiRepository(private val apiKey: String) {
         return generateWithChain(request).first
     }
 
+    /**
+     * Vision cognition: raw JPEG bytes (base64) + honest-analysis prompt share
+     * the same model chain, so image verdicts get identical retry/timeout
+     * behavior. Returns the model text or null when unreachable.
+     */
+    suspend fun analyzeImage(
+        imageBase64: String,
+        mimeType: String,
+        systemPrompt: String,
+        userPrompt: String
+    ): String? {
+        val request = GeminiRequest(
+            systemInstruction = SystemInstruction(parts = listOf(Part(text = systemPrompt))),
+            contents = listOf(
+                Content(
+                    parts = listOf(
+                        Part(text = userPrompt),
+                        Part(inlineData = Blob(mimeType = mimeType, data = imageBase64))
+                    )
+                )
+            )
+        )
+        return generateWithChain(request).first
+    }
+
     private suspend fun generateWithChain(request: GeminiRequest): Pair<String?, Boolean> {
         for (model in modelChain) {
             var attempt = 0

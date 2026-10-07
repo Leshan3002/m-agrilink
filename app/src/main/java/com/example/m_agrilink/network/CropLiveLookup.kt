@@ -1,6 +1,8 @@
 package com.example.m_agrilink.network
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.util.Base64
 import com.example.m_agrilink.data.local.AgriLinkDatabase
 import com.example.m_agrilink.data.local.CropAdvisory
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +13,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 
 data class WikiSummary(
@@ -107,6 +110,77 @@ class CropLiveLookup(context: Context) {
                 "planting spacing, top-dressing, key pests, and safe harvest moisture. " +
                 "Keep it under 120 words, plain farmer-friendly English."
         )
+    }
+
+    companion object {
+        /**
+         * Honest-vision engineering prompt. Non-agricultural frames must be
+         * declined with the exact no-tissue message — never force-fit the
+         * user-specified crop onto a desktop, room, person, or blank object.
+         */
+        const val VISION_SYSTEM_PROMPT =
+            "You are the professional diagnostic engine of M-AgriLink. Analyze the " +
+                "attached image byte array alongside the user-specified crop type. If the " +
+                "image displays agricultural plant tissue, leaves, crops, or fruits, output " +
+                "a structured, itemized analysis detailing the specific disease anomalies " +
+                "and immediate ecological or certified control guidelines. If the image does " +
+                "not contain an agricultural plant subject (e.g., a desktop computer screen, " +
+                "a blank background, a room, or an unrelated object), ignore any " +
+                "pre-selected crop type text and output exactly: 'No agricultural plant " +
+                "tissue or crop anomalies detected in the provided image. Please capture or " +
+                "upload a clear, well-lit close-up photo of your crop foliage for analysis.'"
+    }
+
+    /** Downscales to a bounded JPEG and base64-encodes it for the vision call. */
+    private fun bitmapToBase64(frame: Bitmap): String {
+        val maxSide = 1024
+        val scale = (maxOf(frame.width, frame.height) / maxSide.toFloat()).coerceAtLeast(1f)
+        val scaled = if (scale > 1f) {
+            Bitmap.createScaledBitmap(
+                frame,
+                (frame.width / scale).toInt(),
+                (frame.height / scale).toInt(),
+                true
+            )
+        } else {
+            frame
+        }
+        val out = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+        if (scaled !== frame) {
+            try {
+                scaled.recycle()
+            } catch (e: Exception) {
+            }
+        }
+        return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    /**
+     * Live Gemini vision cognition over the raw captured/uploaded frame.
+     * Key is read from the vault at call time (never hardcoded, never logged);
+     * returns (verdict, source) with source GEMINI_VISION on success, OFFLINE
+     * when the key is missing or the network is unreachable.
+     */
+    suspend fun visionDiagnose(
+        frame: Bitmap,
+        crop: String,
+        county: String
+    ): Pair<String?, String> = withContext(Dispatchers.IO) {
+        if (!SecureKeyVault.isConfigured()) return@withContext null to "OFFLINE"
+        val payload = try {
+            bitmapToBase64(frame)
+        } catch (e: Exception) {
+            return@withContext null to "OFFLINE"
+        }
+        val text = gemini.analyzeImage(
+            imageBase64 = payload,
+            mimeType = "image/jpeg",
+            systemPrompt = VISION_SYSTEM_PROMPT,
+            userPrompt = "User-specified crop type: $crop. County: $county. " +
+                "Give a structured, itemized analysis of what is visible."
+        )
+        if (text.isNullOrBlank()) null to "OFFLINE" else text to "GEMINI_VISION"
     }
 
     /** Free OpenFarm growing guides: spacing, sowing, sun — no key needed. */
