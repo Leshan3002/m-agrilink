@@ -1,7 +1,14 @@
 package com.example.m_agrilink.ui
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,11 +48,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 
 /**
  * Phase 1 scanner shell: branded empty-state layout with a disabled input
@@ -60,6 +70,11 @@ fun AiScannerScreen(
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var chatMessagesList by remember { mutableStateOf(listOf<String>()) }
     val sendEnabled = cropInputText.isNotBlank()
+
+    // Phase 3 docking gallery picker launcher (photo library, images only).
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> selectedImageUri = uri }
 
     Scaffold(
         topBar = {
@@ -94,6 +109,9 @@ fun AiScannerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF064E3B))
+                    // Tablet fix: respect system bars so the dock never hides
+                    // under the navigation taskbar layer.
+                    .windowInsetsPadding(WindowInsets.systemBars)
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 OutlinedTextField(
@@ -108,8 +126,12 @@ fun AiScannerScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 OutlinedButton(
-                    onClick = {},
-                    enabled = false,
+                    onClick = {
+                        galleryLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    enabled = true,
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("📁 Add Photo", fontSize = 12.sp)
@@ -199,6 +221,42 @@ fun AiScannerScreen(
                                 text = "\uD83E\uDD16\uD83C\uDF3F",
                                 fontSize = 40.sp
                             )
+                        }
+                        if (selectedImageUri != null) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Card(
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color.Black.copy(alpha = 0.35f)
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        2.dp,
+                                        Color(0xFFE6B325)
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    AsyncImage(
+                                        model = selectedImageUri,
+                                        contentDescription = "Selected crop photo",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(120.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                    )
+                                }
+                                IconButton(onClick = { selectedImageUri = null }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = "Remove photo",
+                                        tint = Color(0xFFE6B325)
+                                    )
+                                }
+                            }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
