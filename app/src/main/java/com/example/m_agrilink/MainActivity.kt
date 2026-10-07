@@ -20,6 +20,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.m_agrilink.data.local.SessionManager
+import com.example.m_agrilink.ui.AiScannerScreen
 import com.example.m_agrilink.ui.AuthOnboardingScreen
 import com.example.m_agrilink.ui.DashboardScreen
 import com.example.m_agrilink.ui.theme.MAgriLinkTheme
@@ -31,6 +32,7 @@ import kotlinx.coroutines.launch
  * Central layout navigation graph:
  *  Route A "auth_onboarding" -> AuthOnboardingScreen() boot landing page.
  *  Route B "dashboard"        -> DashboardScreen() home hub.
+ *  Route C "ai_scanner"       -> AiScannerScreen(navController) scanner shell.
  *
  * Boot bypass: the DataStore login Flow is read asynchronously — when
  * `is_logged_in` is true the onboarding route is skipped and the dashboard
@@ -39,6 +41,7 @@ import kotlinx.coroutines.launch
 object MagriLinkRoutes {
     const val AUTH_ONBOARDING = "auth_onboarding"
     const val DASHBOARD = "dashboard"
+    const val AI_SCANNER = "ai_scanner"
 }
 
 class MainActivity : ComponentActivity() {
@@ -120,6 +123,9 @@ class MainActivity : ComponentActivity() {
                                 displayEmail = registeredEmail,
                                 onLogout = ::logOut
                             )
+                        }
+                        composable(MagriLinkRoutes.AI_SCANNER) {
+                            AiScannerScreen(navController)
                         }
                     }
                 }
