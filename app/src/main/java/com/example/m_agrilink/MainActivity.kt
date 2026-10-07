@@ -26,12 +26,27 @@ class MainActivity : ComponentActivity() {
         setContent {
             MAgriLinkTheme {
                 var authenticated by rememberSaveable { mutableStateOf(false) }
+                // Post-registration identity, forwarded thread-safely from the
+                // onboarding coroutines. Defaults keep the HUD populated on boot.
+                var registeredName by rememberSaveable { mutableStateOf("Leshan Levi") }
+                var registeredEmail by rememberSaveable { mutableStateOf("levislekesio@gmail.com") }
                 if (authenticated) {
-                    DashboardScreen()
+                    DashboardScreen(
+                        displayName = registeredName,
+                        displayEmail = registeredEmail
+                    )
                 } else {
                     AuthOnboardingScreen(
-                        onAuthenticated = { authenticated = true },
-                        onGoogleSignIn = { authenticated = true }
+                        onAuthenticated = { name, email ->
+                            if (name.isNotBlank()) registeredName = name
+                            if (email.isNotBlank()) registeredEmail = email
+                            authenticated = true
+                        },
+                        onGoogleSignIn = { name, email ->
+                            if (name.isNotBlank()) registeredName = name
+                            if (email.isNotBlank()) registeredEmail = email
+                            authenticated = true
+                        }
                     )
                 }
             }

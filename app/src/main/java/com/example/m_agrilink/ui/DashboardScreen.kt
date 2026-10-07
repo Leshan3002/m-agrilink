@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.unit.dp
@@ -1215,9 +1216,128 @@ private fun MarketOverviewPage(
     }
 }
 
+/** Leading initials for the HUD badge ("Leshan Levi" -> "LL"). */
+private fun accountInitials(name: String): String {
+    val parts = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (parts.isEmpty()) return "?"
+    if (parts.size == 1) return parts[0].take(2).uppercase()
+    return "${parts[0].first()}${parts[1].first()}".uppercase()
+}
+
+/**
+ * Top-right Active Account Profile HUD: circular initial badge + name /
+ * status stack. Tapping expands a non-transactional identity summary drawer.
+ */
+@Composable
+private fun ActiveAccountHud(
+    displayName: String,
+    displayEmail: String
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val safeName = displayName.ifBlank { "Leshan Levi" }
+    val safeEmail = displayEmail.ifBlank { "levislekesio@gmail.com" }
+    Column(horizontalAlignment = Alignment.End) {
+        Surface(
+            shape = CircleShape,
+            color = Color.White,
+            shadowElevation = 3.dp,
+            modifier = Modifier.clickable { expanded = !expanded }
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 6.dp, bottom = 6.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color(0xFF1B5E20), Color(0xFF2E7D32))
+                            )
+                        )
+                ) {
+                    Text(
+                        text = accountInitials(safeName),
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = safeName,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Text(
+                        text = "\uD83D\uDFE2 Active Account",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1B5E20)
+                    )
+                }
+            }
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color.White,
+                shadowElevation = 3.dp,
+                modifier = Modifier.padding(top = 6.dp).widthIn(max = 260.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Account identity",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFE6B325)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = safeName,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                    Text(
+                        text = safeEmail,
+                        fontSize = 12.sp,
+                        color = Color.DarkGray
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "They stay signed in on their device and their harvest data never leaves this phone.",
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Non-transactional summary — no payments are handled here.",
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen() {
+fun DashboardScreen(
+    displayName: String = "Leshan Levi",
+    displayEmail: String = "levislekesio@gmail.com"
+) {
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(false) }
     // Session states survive minimize / rotation / process death.
@@ -1521,6 +1641,10 @@ fun DashboardScreen() {
                         fontSize = 10.sp,
                         color = Color(0xFFF2E6E6),
                         modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                    ActiveAccountHud(
+                        displayName = displayName,
+                        displayEmail = displayEmail
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -2514,6 +2638,15 @@ fun DashboardScreen() {
         }
 // CRITICAL SPACER BUFFER: Prevents layout elements from crashing into the bottom tab bar icons
             Spacer(modifier = Modifier.height(100.dp))
+            Text(
+                text = "M-AgriLink Identity Protection System — Configured and Supervised by Lead System Architect Levis Lekesio.",
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                color = Color.Gray,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             } // end home-page widgets (weather lives on its own page)
         }
     }

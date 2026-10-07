@@ -132,13 +132,14 @@ private fun isPasswordValid(value: String): Boolean = value.length >= 6
  *
  * Phase 1: full-bleed field-green splash reading "Welcome to M-AgriLink",
  * auto-dismissed after a non-blocking 2.5s delay.
- * Phase 2: scrollable account creation form. Submit navigates to dashboard
- * via [onAuthenticated].
+ * Phase 2: scrollable account creation form. Submit forwards the validated
+ * name + email via [onAuthenticated] so the dashboard route can populate
+ * the Active Account Profile HUD.
  */
 @Composable
 fun AuthOnboardingScreen(
-    onAuthenticated: () -> Unit = {},
-    onGoogleSignIn: () -> Unit = {}
+    onAuthenticated: (name: String, email: String) -> Unit = { _, _ -> },
+    onGoogleSignIn: (name: String, email: String) -> Unit = { _, _ -> }
 ) {
     var showSplash by remember { mutableStateOf(true) }
 
@@ -290,8 +291,8 @@ private fun OnboardingGlowHeader(validationProgress: Float) {
 
 @Composable
 private fun AccountCreationPanel(
-    onAuthenticated: () -> Unit,
-    onGoogleSignIn: () -> Unit
+    onAuthenticated: (name: String, email: String) -> Unit,
+    onGoogleSignIn: (name: String, email: String) -> Unit
 ) {
     var fullName by remember { mutableStateOf("") }
     var emailOrPhone by remember { mutableStateOf("") }
@@ -332,15 +333,17 @@ private fun AccountCreationPanel(
             try {
                 val contact = emailOrPhone.trim()
                 val isEmail = contact.contains("@")
+                val name = fullName.trim()
+                val email = if (isEmail) contact else ""
                 accountRepo.ensureGuestProfile()
-                accountRepo.saveDisplayName(fullName.trim())
+                accountRepo.saveDisplayName(name)
                 accountRepo.updateProfileDetails(
-                    email = if (isEmail) contact else "",
+                    email = email,
                     phone = if (isEmail) "" else contact,
                     county = "",
                     acreage = 1.0
                 )
-                onAuthenticated()
+                onAuthenticated(name, email)
             } catch (e: Exception) {
                 authError = "They could not create their account: ${e.message ?: "try again"}."
             } finally {
@@ -355,10 +358,12 @@ private fun AccountCreationPanel(
         authError = null
         scope.launch {
             try {
-                val name = fullName.trim().ifBlank { "Farmer" }
+                val name = fullName.trim().ifBlank { "Leshan Levi" }
+                val contact = emailOrPhone.trim()
+                val email = if (contact.contains("@")) contact else "levislekesio@gmail.com"
                 accountRepo.ensureGuestProfile()
                 accountRepo.saveDisplayName(name)
-                onGoogleSignIn()
+                onGoogleSignIn(name, email)
             } catch (e: Exception) {
                 authError = "They could not link their Google identity: ${e.message ?: "try again"}."
             } finally {
