@@ -312,12 +312,19 @@ private fun AccountCreationPanel(
     val contactOk = isEmailOrPhoneValid(emailOrPhone)
     val passwordOk = isPasswordValid(password)
     val confirmOk = confirmPassword.isNotEmpty() && confirmPassword == password
-    val formValid = fullNameOk && contactOk && passwordOk && confirmOk && hasAcceptedTerms
+    // Strict format flags above drive inline hints + the sprout tracker.
+    // The submit gate below uses presence + length + match + consent so a
+    // checked box with filled rows always unlocks the button.
+    val isFormValid = fullName.trim().isNotEmpty() &&
+        emailOrPhone.trim().isNotEmpty() &&
+        password.length >= 6 &&
+        confirmPassword == password &&
+        hasAcceptedTerms
     val completedSteps = listOf(fullNameOk, contactOk, passwordOk, confirmOk, hasAcceptedTerms).count { it }
     val validationProgress = completedSteps / 5f
 
     fun persistAccountAndContinue() {
-        if (!formValid || isSaving) return
+        if (!isFormValid || isSaving) return
         submitted = true
         isSaving = true
         authError = null
@@ -409,7 +416,7 @@ private fun AccountCreationPanel(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "They can link their Google identity to keep their account secure.",
+            text = "Link your Google identity for fast, secure authentication.",
             fontSize = 12.sp,
             color = Color.Gray,
             textAlign = TextAlign.Center
@@ -478,7 +485,7 @@ private fun AccountCreationPanel(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             supportingText = {
                 if (password.isNotEmpty() && !passwordOk) {
-                    Text("Their password needs at least 6 characters.")
+                    Text("Password must be at least 6 characters long.")
                 } else {
                     Text("They should keep their password secret from others.")
                 }
@@ -521,7 +528,7 @@ private fun AccountCreationPanel(
 
         // DYNAMIC EXPANDABLE TERMS DIALOG INTERFACE
         Text(
-            text = "\uD83D\uDCC4 By creating an account, they agree to our Terms and Conditions. Tap to read.",
+            text = "View the official M-AgriLink Terms and Conditions",
             fontSize = 13.sp,
             lineHeight = 18.sp,
             fontWeight = FontWeight.SemiBold,
@@ -569,10 +576,12 @@ private fun AccountCreationPanel(
             )
         }
 
-        // FORM TRIGGER UNLOCK LOGIC: enabled only when every input is valid
-        // AND hasAcceptedTerms is true. Tapping persists the account off the
-        // main thread, then fires onAuthenticated() — the MainActivity boot
-        // router swaps to DashboardScreen(), the app's "dashboard" route.
+        // FORM TRIGGER UNLOCK LOGIC: isFormValid resolves true once every row
+        // is filled (password >= 6, passwords match) AND hasAcceptedTerms is
+        // true. The button then flips to active harvest gold and enables
+        // clicks. Tapping persists the account off the main thread, then
+        // fires onAuthenticated() — the MainActivity boot router swaps to
+        // DashboardScreen(), the app's "dashboard" route.
         if (authError != null) {
             Text(
                 text = authError ?: "",
@@ -586,14 +595,14 @@ private fun AccountCreationPanel(
         }
         Button(
             onClick = { persistAccountAndContinue() },
-            enabled = formValid && !isSaving,
+            enabled = isFormValid && !isSaving,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = FieldGreen,
-                contentColor = GoldAccent,
+                containerColor = GoldAccent,
+                contentColor = FieldGreenDark,
                 disabledContainerColor = Color(0xFFBDBDBD),
                 disabledContentColor = Color.White
             )
@@ -604,7 +613,7 @@ private fun AccountCreationPanel(
                 fontWeight = FontWeight.Bold
             )
         }
-        if (submitted && !formValid) {
+        if (submitted && !isFormValid) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "They still need to fix the highlighted fields before they can continue.",
