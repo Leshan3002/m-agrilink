@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface FarmerDao {
@@ -14,6 +15,9 @@ interface FarmerDao {
 
     @Query("SELECT * FROM farmer_profile ORDER BY id ASC LIMIT 1")
     suspend fun getProfile(): FarmerProfile?
+
+    @Query("SELECT * FROM farmer_profile ORDER BY id ASC LIMIT 1")
+    fun observeProfile(): Flow<FarmerProfile?>
 
     @Query("UPDATE farmer_profile SET county = :county, updatedAt = :now WHERE id = :id")
     suspend fun updateCounty(id: Long, county: String, now: Long = System.currentTimeMillis())
@@ -48,6 +52,9 @@ interface FarmerDao {
 
     @Query("SELECT DISTINCT cropName FROM crop_search_history ORDER BY timestamp DESC LIMIT :limit")
     suspend fun recentCropNames(limit: Int = 8): List<String>
+
+    @Query("SELECT DISTINCT cropName FROM crop_search_history ORDER BY timestamp DESC LIMIT :limit")
+    fun observeRecentCropNames(limit: Int = 8): Flow<List<String>>
 
     // --- Live-brief cache (stored inside crop_advisory as LIVE_BRIEF rows) ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)

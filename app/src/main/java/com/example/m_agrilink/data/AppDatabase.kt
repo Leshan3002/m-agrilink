@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase
 /**
  * 1. DATA LAYER: Room Database
  */
-@Database(entities = [MarketPrice::class, MarketPriceCache::class], version = 3, exportSchema = false)
+@Database(entities = [MarketPrice::class, MarketPriceCache::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun marketPriceDao(): MarketPriceDao
 

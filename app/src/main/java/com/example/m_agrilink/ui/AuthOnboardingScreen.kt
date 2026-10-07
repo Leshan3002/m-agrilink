@@ -35,18 +35,19 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -546,7 +547,7 @@ private fun AccountCreationPanel(
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "I agree to the Terms and Conditions of M-AgriLink",
+                text = "I have read and agree to the Terms and Conditions of M-AgriLink",
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -556,21 +557,16 @@ private fun AccountCreationPanel(
                     .padding(top = 10.dp)
             )
         }
-        if (!hasAcceptedTerms) {
-            Text(
-                text = "They must accept the Terms before they can continue.",
-                fontSize = 12.sp,
-                color = Color(0xFFB71C1C),
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-            )
-        }
         Spacer(modifier = Modifier.height(12.dp))
 
         if (showTermsDialog) {
-            TermsAndConditionsDialog(onDismiss = { showTermsDialog = false })
+            TermsAndConditionsSheet(
+                onDismiss = { showTermsDialog = false },
+                onAccept = {
+                    hasAcceptedTerms = true
+                    showTermsDialog = false
+                }
+            )
         }
 
         // FORM TRIGGER UNLOCK LOGIC: enabled only when every input is valid
@@ -595,7 +591,12 @@ private fun AccountCreationPanel(
                 .fillMaxWidth()
                 .height(52.dp),
             shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = FieldGreen)
+            colors = ButtonDefaults.buttonColors(
+                containerColor = FieldGreen,
+                contentColor = GoldAccent,
+                disabledContainerColor = Color(0xFFBDBDBD),
+                disabledContentColor = Color.White
+            )
         ) {
             Text(
                 if (isSaving) "Creating their account…" else "Create Account",
@@ -631,19 +632,32 @@ private fun AccountCreationPanel(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TermsAndConditionsDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+private fun TermsAndConditionsSheet(
+    onDismiss: () -> Unit,
+    onAccept: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = {
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = Color.White
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
+        ) {
             Text(
                 text = "M-AGRILINK PLATFORM TERMS AND CONDITIONS",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = FieldGreen
             )
-        },
-        text = {
+            Spacer(modifier = Modifier.height(10.dp))
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -657,15 +671,22 @@ private fun TermsAndConditionsDialog(onDismiss: () -> Unit) {
                     color = Color(0xFF2C2C2E)
                 )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close", fontWeight = FontWeight.Bold, color = FieldGreen)
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onAccept,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = FieldGreen,
+                    contentColor = GoldAccent
+                )
+            ) {
+                Text("I Accept", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
-        },
-        shape = RoundedCornerShape(20.dp),
-        containerColor = Color.White
-    )
+        }
+    }
 }
 
 @Composable
