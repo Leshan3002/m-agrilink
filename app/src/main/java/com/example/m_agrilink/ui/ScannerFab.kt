@@ -1,41 +1,24 @@
 package com.example.m_agrilink.ui
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import com.example.m_agrilink.network.CropLiveLookup
 
 /**
  * M-AgriLink Intelligent AI Scanner Core Engine — Programmed and Directed by
@@ -86,75 +69,19 @@ fun ScannerAvatarFab(
     }
 }
 
-/** Full-screen scanner workspace overlay with an explicit close control. */
-@Composable
-private fun ScannerOverlayDialog(
-    onClose: () -> Unit,
-    content: @Composable () -> Unit
-) {
-    Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = Color(0xFFF4F6F8)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                content()
-                IconButton(
-                    onClick = onClose,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Close scanner",
-                        tint = Color.Black
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun openWebUrl(context: android.content.Context, url: String) {
-    try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-    } catch (e: Exception) {
-    }
-}
-
 /**
- * Global pre-auth scanner entry for the onboarding route: the dashboard hosts
- * its own context-aware FAB, so this covers every remaining screen.
+ * Global pre-auth scanner entry for the onboarding route: renders the avatar
+ * bubble bottom-right; the tap handler (a navController.navigate call from
+ * the host graph) runs on the caller side, off the render path.
  */
 @Composable
-fun GlobalScannerEntry() {
-    val context = LocalContext.current
-    val lookup = remember(context) { CropLiveLookup(context.applicationContext) }
-    var open by remember { mutableStateOf(false) }
+fun GlobalScannerEntry(
+    onOpenScanner: () -> Unit
+) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.BottomEnd
     ) {
-        ScannerAvatarFab(onClick = { open = true })
-    }
-    if (open) {
-        ScannerOverlayDialog(onClose = { open = false }) {
-            AiScannerScreen(
-                selectedCounty = "Kenya",
-                farmerPlantedCrop = "",
-                textToSpeech = null,
-                liveLookup = lookup,
-                onOpenWebLink = { openWebUrl(context, it) },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+        ScannerAvatarFab(onClick = onOpenScanner)
     }
 }

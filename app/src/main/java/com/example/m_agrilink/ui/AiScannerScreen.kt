@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Pause
@@ -128,7 +129,8 @@ fun AiScannerScreen(
     textToSpeech: TextToSpeech?,
     liveLookup: CropLiveLookup,
     onOpenWebLink: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClose: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val appContext = context.applicationContext
@@ -362,6 +364,26 @@ fun AiScannerScreen(
         colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
+            // Top back-arrow row (rendered only when a close handler is wired,
+            // e.g. the "ai_scanner" nav destination popping the back stack).
+            if (onClose != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to previous screen",
+                            tint = Color(0xFF1B5E20)
+                        )
+                    }
+                    Text(
+                        text = "Back",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1B5E20)
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+            }
             Text(
                 text = str("scan_ai_core_tag"),
                 color = Color.Gray,
