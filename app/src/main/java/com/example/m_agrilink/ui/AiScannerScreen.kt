@@ -1,5 +1,6 @@
 package com.example.m_agrilink.ui
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,7 +54,11 @@ import androidx.navigation.NavController
 fun AiScannerScreen(
     navController: NavController
 ) {
-    var cropInput by rememberSaveable { mutableStateOf("") }
+    // Phase 2 reactive chat state hooks.
+    var cropInputText by remember { mutableStateOf("") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var chatMessagesList by remember { mutableStateOf(listOf<String>()) }
+    val sendEnabled = cropInputText.isNotBlank()
 
     Scaffold(
         topBar = {
@@ -92,10 +96,11 @@ fun AiScannerScreen(
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 OutlinedTextField(
-                    value = cropInput,
-                    onValueChange = { cropInput = it },
-                    enabled = false,
+                    value = cropInputText,
+                    onValueChange = { cropInputText = it },
+                    enabled = true,
                     singleLine = true,
+                    label = { Text("What crop are you scanning?") },
                     placeholder = { Text("Target crop (e.g., Passion Fruit)...") },
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.weight(1f)
@@ -110,14 +115,17 @@ fun AiScannerScreen(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
-                    onClick = {},
-                    enabled = false,
+                    onClick = {
+                        chatMessagesList = chatMessagesList + "Scanning crop: $cropInputText"
+                        cropInputText = ""
+                    },
+                    enabled = sendEnabled,
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFE6B325),
                         contentColor = Color(0xFF1B4332),
-                        disabledContainerColor = Color(0xFFE6B325),
-                        disabledContentColor = Color(0xFF1B4332)
+                        disabledContainerColor = Color(0xFFE6B325).copy(alpha = 0.35f),
+                        disabledContentColor = Color(0xFF1B4332).copy(alpha = 0.5f)
                     ),
                     modifier = Modifier.size(52.dp)
                 ) {
@@ -148,6 +156,24 @@ fun AiScannerScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                chatMessagesList.forEach { message ->
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFE6B325)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = message,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF1B4332),
+                            modifier = Modifier.padding(14.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
