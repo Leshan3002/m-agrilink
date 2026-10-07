@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.ShowChart
@@ -45,6 +46,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1353,6 +1355,7 @@ fun DashboardScreen(
     }
     var farmerPlantedCrop by rememberSaveable { mutableStateOf("") }
     var showShambaChat by rememberSaveable { mutableStateOf(false) }
+    var showScanner by rememberSaveable { mutableStateOf(false) }
 
     // --- TOP ACTION BAR STATE MACHINE (thread-safe Compose state) ---
     // Account creation lives only in AuthOnboardingScreen (app boot entry);
@@ -1512,8 +1515,9 @@ fun DashboardScreen(
 
     // System back button: step back through scanner -> chat -> market/weather/articles pages
     // instead of exiting the app from a sub-page.
-    BackHandler(enabled = showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "articles") {
+    BackHandler(enabled = showScanner || showShambaChat || activeViewport == "weather" || activeViewport == "market" || activeViewport == "articles") {
         when {
+            showScanner -> showScanner = false
             showShambaChat -> showShambaChat = false
             activeViewport == "weather" || activeViewport == "market" || activeViewport == "articles" -> activeViewport = "home"
         }
@@ -1573,6 +1577,10 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        floatingActionButton = {
+            // Persistent bottom-right Shamba AI avatar bubble (all viewports).
+            ScannerAvatarFab(onClick = { showScanner = true })
+        },
         bottomBar = {
             // Mobile-style 3-button bottom navigation: Navigate • Language • Settings.
             NavigationBar(
@@ -2465,19 +2473,6 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // --- 3A. AI SCANNER (isolated production screen: dual-input diagnostics) ---
-            // ID: @+id/cardCropDiagnostics
-            AiScannerScreen(
-                selectedCounty = selectedCounty,
-                farmerPlantedCrop = farmerPlantedCrop,
-                textToSpeech = textToSpeech,
-                liveLookup = liveLookup,
-                onOpenWebLink = { openWebLink(it) },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             // --- 3A-iii. FRIENDLY SHAMBA AI CHAT ENTRY (typing, crops + cattle) ---
             Card(
                 modifier = Modifier
@@ -2536,6 +2531,48 @@ fun DashboardScreen(
                         ),
                         onDismiss = { showShambaChat = false }
                     )
+                }
+            }
+
+            // --- 3A. AI SCANNER OVERLAY (FAB-launched diagnostics workspace) ---
+            // The static inline scanner block was removed to slim the page;
+            // the avatar FAB opens this full workspace overlay instead.
+            if (showScanner) {
+                Dialog(
+                    onDismissRequest = { showScanner = false },
+                    properties = DialogProperties(usePlatformDefaultWidth = false)
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = if (isDarkTheme) Color(0xFF121212) else Color(0xFFF4F6F8)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            AiScannerScreen(
+                                selectedCounty = selectedCounty,
+                                farmerPlantedCrop = farmerPlantedCrop,
+                                textToSpeech = textToSpeech,
+                                liveLookup = liveLookup,
+                                onOpenWebLink = { openWebLink(it) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            IconButton(
+                                onClick = { showScanner = false },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Close scanner",
+                                    tint = if (isDarkTheme) Color.White else Color.Black
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

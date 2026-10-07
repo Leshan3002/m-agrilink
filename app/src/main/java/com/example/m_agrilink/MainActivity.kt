@@ -4,12 +4,16 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import com.example.m_agrilink.ui.AuthOnboardingScreen
 import com.example.m_agrilink.ui.DashboardScreen
+import com.example.m_agrilink.ui.GlobalScannerEntry
 import com.example.m_agrilink.ui.theme.MAgriLinkTheme
 
 /**
@@ -36,18 +40,23 @@ class MainActivity : ComponentActivity() {
                         displayEmail = registeredEmail
                     )
                 } else {
-                    AuthOnboardingScreen(
-                        onAuthenticated = { name, email ->
-                            if (name.isNotBlank()) registeredName = name
-                            if (email.isNotBlank()) registeredEmail = email
-                            authenticated = true
-                        },
-                        onGoogleSignIn = { name, email ->
-                            if (name.isNotBlank()) registeredName = name
-                            if (email.isNotBlank()) registeredEmail = email
-                            authenticated = true
-                        }
-                    )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AuthOnboardingScreen(
+                            onAuthenticated = { name, email ->
+                                if (name.isNotBlank()) registeredName = name
+                                if (email.isNotBlank()) registeredEmail = email
+                                authenticated = true
+                            },
+                            onGoogleSignIn = { name, email ->
+                                if (name.isNotBlank()) registeredName = name
+                                if (email.isNotBlank()) registeredEmail = email
+                                authenticated = true
+                            }
+                        )
+                        // Persistent pre-auth scanner bubble (the dashboard
+                        // hosts its own context-aware FAB once signed in).
+                        GlobalScannerEntry()
+                    }
                 }
             }
         }
