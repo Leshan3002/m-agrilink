@@ -64,8 +64,8 @@ class GeminiRepository(private val apiKey: String) {
     /** Free-form generation sharing the same chain (used by crop briefs). */
     suspend fun generateBrief(systemPrompt: String, userPrompt: String): String? {
         val request = GeminiRequest(
-            systemInstruction = SystemInstruction(parts = listOf(Part(systemPrompt))),
-            contents = listOf(Content(parts = listOf(Part(userPrompt))))
+            systemInstruction = SystemInstruction(parts = listOf(Part(text = systemPrompt))),
+            contents = listOf(Content(parts = listOf(Part(text = userPrompt))))
         )
         return generateWithChain(request).first
     }

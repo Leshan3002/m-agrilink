@@ -1358,8 +1358,7 @@ private fun ActiveAccountHud(
 fun DashboardScreen(
     displayName: String = "Leshan Levi",
     displayEmail: String = "levislekesio@gmail.com",
-    onLogout: () -> Unit = {},
-    onOpenScanner: () -> Unit = {}
+    onLogout: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(false) }
@@ -2547,74 +2546,6 @@ fun DashboardScreen(
                         ),
                         onDismiss = { showShambaChat = false }
                     )
-                }
-            }
-
-            // --- 3A. SHAMBA AI DIAGNOSTIC COMPANION (stationary cockpit card) ---
-            // Field-green glassmorphism entry: the floating avatar bubble and
-            // its overlay were purged; this card routes to the scanner graph.
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(6.dp, RoundedCornerShape(20.dp)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color(0xFF1B4332), Color(0xFF2D6A4F))
-                            )
-                        )
-                        .padding(20.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .border(2.dp, Color(0xFFE6B325), CircleShape)
-                    ) {
-                        Text(
-                            text = "\uD83C\uDF3E",
-                            fontSize = 28.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "\uD83E\uDD16 Shamba AI Diagnostic Companion",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "They point their lens at any leaf and their companion reads it for them.",
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
-                            color = Color(0xFFD8F3DC)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = onOpenScanner,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFE6B325),
-                                contentColor = Color(0xFF1B4332)
-                            )
-                        ) {
-                            Text(
-                                "Launch Intelligent AI Scan",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
                 }
             }
 
