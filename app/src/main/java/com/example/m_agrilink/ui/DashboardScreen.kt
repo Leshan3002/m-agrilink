@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Savings
@@ -40,6 +41,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -1216,6 +1218,95 @@ private fun MarketOverviewPage(
     }
 }
 
+/**
+ * Shamba Scan cockpit entry: full-width glass card with a 3000ms breathing
+ * glow cycling Sprout Light Green (#52B788) <-> Organic Forest Green
+ * (#1B4332) across the border stroke and icon accents. The whole card is
+ * clickable and routes to the scanner destination.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShambaScanEntryCard(
+    onOpenScanner: () -> Unit
+) {
+    val breath = rememberInfiniteTransition(label = "shambaEntryBreath")
+    val glowFraction by breath.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "entryGlowFraction"
+    )
+    val glowColor = lerp(Color(0xFF52B788), Color(0xFF1B4332), glowFraction)
+    val pulseScale by breath.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "entryPulseScale"
+    )
+
+    Card(
+        onClick = onOpenScanner,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = androidx.compose.foundation.BorderStroke(2.dp, glowColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(52.dp)
+                    .graphicsLayer {
+                        scaleX = pulseScale
+                        scaleY = pulseScale
+                    }
+                    .clip(CircleShape)
+                    .background(glowColor.copy(alpha = 0.16f))
+            ) {
+                Text(
+                    text = "\uD83E\uDD16\uD83C\uDF3F",
+                    fontSize = 26.sp
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "\uD83E\uDD16 Shamba Scan Console",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFE6B325)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Instant crop diagnostics & satellite biosecurity tracking active.",
+                    fontSize = 13.sp,
+                    color = Color.DarkGray
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = "Open Shamba Scan",
+                tint = Color(0xFFE6B325),
+                modifier = Modifier.size(28.dp)
+            )
+        }
+    }
+}
+
 /** Leading initials for the HUD badge ("Leshan Levi" -> "LL"). */
 private fun accountInitials(name: String): String {
     val parts = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
@@ -1358,7 +1449,8 @@ private fun ActiveAccountHud(
 fun DashboardScreen(
     displayName: String = "Leshan Levi",
     displayEmail: String = "levislekesio@gmail.com",
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onOpenScanner: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(false) }
@@ -1694,6 +1786,9 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(4.dp))
             }
         }
+
+        // --- 1-h. SHAMBA SCAN COCKPIT ENTRY (breathing glow, routes to ai_scanner) ---
+        ShambaScanEntryCard(onOpenScanner = onOpenScanner)
 
         // --- 1-i. NATIONAL BIOSECURITY ALERT CAPSULE (county × crop pest monitor) ---
         PestOutbreakAlertBanner(selectedCounty = selectedCounty, plantedCrop = farmerPlantedCrop)

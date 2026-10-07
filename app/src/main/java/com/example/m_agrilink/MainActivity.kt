@@ -121,7 +121,10 @@ class MainActivity : ComponentActivity() {
                             DashboardScreen(
                                 displayName = registeredName,
                                 displayEmail = registeredEmail,
-                                onLogout = ::logOut
+                                onLogout = ::logOut,
+                                onOpenScanner = {
+                                    navController.navigate(MagriLinkRoutes.AI_SCANNER)
+                                }
                             )
                         }
                         composable(MagriLinkRoutes.AI_SCANNER) {
