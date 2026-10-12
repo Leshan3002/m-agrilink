@@ -440,9 +440,10 @@ private fun PestOutbreakAlertBanner(
         }
         else -> {
             container = fieldGreen
-            val cropLabel = plantedCrop.trim().ifBlank { str("lens_your_crop") }.uppercase()
-            val countyLabel = selectedCounty.trim().ifBlank { str("out_your_county") }.uppercase()
-            message = strf("pest_clear_fmt", cropLabel, countyLabel)
+            val cropDisplay = if (plantedCrop.isNotBlank()) plantedCrop.trim().uppercase() else "YOUR SELECTED CROP"
+            val countyDisplay = if (selectedCounty.isNotBlank()) selectedCounty.trim().uppercase() else "YOUR COUNTY"
+            val alertText = "🌱 BIOSECURITY SAFETIES ACTIVE: No critical disease outbreaks reported for $cropDisplay inside $countyDisplay. Maintain standard certified farm inputs and hygiene routines."
+            message = if (AppLocale.isSwahili) strf("pest_clear_fmt", cropDisplay, countyDisplay) else alertText
         }
     }
     val pulse = rememberInfiniteTransition(label = "pestAlertPulse")
