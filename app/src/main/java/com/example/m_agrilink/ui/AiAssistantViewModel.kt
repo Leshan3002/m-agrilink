@@ -33,18 +33,10 @@ class AiAssistantViewModel : ViewModel() {
             "M-AgriLink advisory framework."
     }
 
-    /** Search links so the farmer can watch/read more (YouTube + Wikipedia). */
-    private fun learnMoreBlock(inquiry: String): String {
-        val query = inquiry.trim().take(120).ifBlank { "sustainable farming Kenya" }
-        val encoded = try {
-            java.net.URLEncoder.encode(query, "UTF-8")
-        } catch (e: Exception) {
-            query.replace(" ", "+")
-        }
-        return "\n\n✅ Does this fully answer your question? Tell me what is still unclear and I will explain further." +
-            "\n📺 Watch a video guide: https://www.youtube.com/results?search_query=$encoded" +
-            "\n📖 Read more details: https://en.wikipedia.org/wiki/Special:Search?search=$encoded"
-    }
+    /** Closing satisfaction check appended to every answer. Generic video/wiki
+     * helper links were removed so replies stay focused on localized data. */
+    private fun satisfactionCheckSuffix(): String =
+        "\n\n✅ Does this fully answer your question? Tell me what is still unclear and I will explain further."
 
     private fun isBuilderQuestion(inquiry: String): Boolean {
         val q = inquiry.lowercase()
@@ -169,15 +161,15 @@ class AiAssistantViewModel : ViewModel() {
                     engineStatus = EngineStatus.ONLINE
                     if (streamIndex >= 0) {
                         messages[streamIndex] =
-                            messages[streamIndex].copy(text = streamed + learnMoreBlock(inquiry))
+                            messages[streamIndex].copy(text = streamed + satisfactionCheckSuffix())
                     } else {
-                        messages.add(ChatMessage(streamed + learnMoreBlock(inquiry), isUser = false))
+                        messages.add(ChatMessage(streamed + satisfactionCheckSuffix(), isUser = false))
                     }
                 }
                 else -> {
                     if (streamIndex >= 0) messages.removeAt(streamIndex)
                     registerFailureSilent()
-                    messages.add(ChatMessage(offlineExpertBrief(telemetry) + learnMoreBlock(inquiry), isUser = false))
+                    messages.add(ChatMessage(offlineExpertBrief(telemetry) + satisfactionCheckSuffix(), isUser = false))
                 }
             }
         }
