@@ -28,6 +28,9 @@ class SessionManager(context: Context) {
         val IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
         val USER_NAME = stringPreferencesKey("user_name")
         val USER_EMAIL = stringPreferencesKey("user_email")
+        // First-run cold-sweep flag: true until the maiden cache purge completes.
+        // Permanent once flipped; sign-out never resets it for them.
+        val IS_FIRST_RUN = booleanPreferencesKey("is_first_run_v6137")
     }
 
     val isLoggedIn: Flow<Boolean> = store.data.map { it[IS_LOGGED_IN] == true }
@@ -35,6 +38,16 @@ class SessionManager(context: Context) {
     val userName: Flow<String> = store.data.map { it[USER_NAME] ?: "" }
 
     val userEmail: Flow<String> = store.data.map { it[USER_EMAIL] ?: "" }
+
+    /** True on maiden boot (key absent counts as first run). */
+    val isFirstRun: Flow<Boolean> = store.data.map { it[IS_FIRST_RUN] != false }
+
+    /** Permanently marks the cold sweep done so later boots skip it. */
+    suspend fun markFirstRunComplete() {
+        store.edit { prefs ->
+            prefs[IS_FIRST_RUN] = false
+        }
+    }
 
     suspend fun saveSession(name: String, email: String) {
         store.edit { prefs ->

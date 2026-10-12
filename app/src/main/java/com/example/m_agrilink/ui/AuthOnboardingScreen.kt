@@ -1,14 +1,11 @@
 package com.example.m_agrilink.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,10 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -49,7 +42,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,11 +49,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -72,10 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.m_agrilink.domain.RoomFarmerAccountRepository
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private const val SPLASH_TIMEOUT_MS = 2500L
 
 private const val TERMS_AND_CONDITIONS_BODY =
     "M-AGRILINK PLATFORM TERMS AND CONDITIONS\n\n" +
@@ -126,9 +112,9 @@ private fun isPasswordValid(value: String): Boolean = value.length >= 6
 /**
  * Independent onboarding boot entry point.
  *
- * Phase 1: full-bleed field-green splash reading "Welcome to M-AgriLink",
- * auto-dismissed after a non-blocking 2.5s delay.
- * Phase 2: scrollable account creation form. Submit forwards the validated
+ * Boot splash now lives at the application root ([BootSplash] in
+ * MainActivity, 2500ms cross-fade): this screen renders the gold-accented
+ * registration form directly. Submit forwards the validated
  * name + email via [onAuthenticated] so the dashboard route can populate
  * the Active Account Profile HUD.
  */
@@ -137,66 +123,10 @@ fun AuthOnboardingScreen(
     onAuthenticated: (name: String, email: String) -> Unit = { _, _ -> },
     onGoogleSignIn: (name: String, email: String) -> Unit = { _, _ -> }
 ) {
-    var showSplash by remember { mutableStateOf(true) }
-
-    // Non-blocking boot timeout: fades splash out, reveals the form.
-    LaunchedEffect(Unit) {
-        delay(SPLASH_TIMEOUT_MS)
-        showSplash = false
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Account creation panel is always composed underneath so the
-        // splash fade reveals it without a navigation jump.
-        AccountCreationPanel(
-            onAuthenticated = onAuthenticated,
-            onGoogleSignIn = onGoogleSignIn
-        )
-
-        AnimatedVisibility(
-            visible = showSplash,
-            enter = fadeIn(animationSpec = tween(400)),
-            exit = fadeOut(animationSpec = tween(600))
-        ) {
-            WelcomeSplash()
-        }
-    }
-}
-
-@Composable
-private fun WelcomeSplash() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(FieldGreenDark, FieldGreen, FieldGreenLight)
-                )
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(32.dp)
-        ) {
-            Text(
-                text = "Welcome to M-AgriLink",
-                color = GoldAccent,
-                fontSize = 30.sp,
-                lineHeight = 38.sp,
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .width(64.dp)
-                    .height(4.dp)
-                    .clip(CircleShape)
-                    .background(GoldAccent.copy(alpha = 0.85f))
-            )
-        }
-    }
+    AccountCreationPanel(
+        onAuthenticated = onAuthenticated,
+        onGoogleSignIn = onGoogleSignIn
+    )
 }
 
 @Composable
@@ -222,20 +152,11 @@ private fun OnboardingGlowHeader(validationProgress: Float) {
         ),
         label = "glowAlpha"
     )
-    // Sprout bar + floating leaf track live validation progress as they type.
+    // Progress bar tracks live validation progress as they type.
     val animatedProgress by animateFloatAsState(
         targetValue = validationProgress,
         animationSpec = tween(durationMillis = 500),
         label = "sproutProgress"
-    )
-    val leafDrift by glowTransition.animateFloat(
-        initialValue = -6f,
-        targetValue = 6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "leafDrift"
     )
 
     Column(
@@ -258,30 +179,15 @@ private fun OnboardingGlowHeader(validationProgress: Float) {
             )
         }
         Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Spa,
-                contentDescription = "Validation sprout",
-                tint = OrganicForestGreen,
-                modifier = Modifier
-                    .size(22.dp)
-                    .graphicsLayer { translationX = leafDrift }
-                    .alpha(0.45f + 0.55f * animatedProgress)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            LinearProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(8.dp)
-                    .clip(CircleShape),
-                color = SproutLightGreen,
-                trackColor = OrganicForestGreen.copy(alpha = 0.18f)
-            )
-        }
+        LinearProgressIndicator(
+            progress = { animatedProgress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(CircleShape),
+            color = SproutLightGreen,
+            trackColor = OrganicForestGreen.copy(alpha = 0.18f)
+        )
     }
 }
 
@@ -341,7 +247,7 @@ private fun AccountCreationPanel(
                 )
                 onAuthenticated(name, email)
             } catch (e: Exception) {
-                authError = "They could not create their account: ${e.message ?: "try again"}."
+                authError = "We could not create your account: ${e.message ?: "try again"}."
             } finally {
                 isSaving = false
             }
@@ -354,14 +260,14 @@ private fun AccountCreationPanel(
         authError = null
         scope.launch {
             try {
-                val name = fullName.trim().ifBlank { "Leshan Levi" }
+                val name = fullName.trim().ifBlank { "Levis Lekesio" }
                 val contact = emailOrPhone.trim()
                 val email = if (contact.contains("@")) contact else "levislekesio@gmail.com"
                 accountRepo.ensureGuestProfile()
                 accountRepo.saveDisplayName(name)
                 onGoogleSignIn(name, email)
             } catch (e: Exception) {
-                authError = "They could not link their Google identity: ${e.message ?: "try again"}."
+                authError = "We could not link your Google identity: ${e.message ?: "try again"}."
             } finally {
                 isSaving = false
             }
@@ -416,19 +322,18 @@ private fun AccountCreationPanel(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        // FORM INPUT FIELDS
+        // FORM INPUT FIELDS — minimalist: floating labels only, no decorative icons.
         OutlinedTextField(
             value = fullName,
             onValueChange = { fullName = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Full Name") },
-            placeholder = { Text("Enter their full name (e.g. Amina Odhiambo)") },
-            leadingIcon = { Icon(Icons.Filled.Person, contentDescription = "Full name") },
+            placeholder = { Text("Enter your full name (e.g. Amina Odhiambo)") },
             supportingText = {
                 if (fullName.isNotEmpty() && !fullNameOk) {
-                    Text("Use letters only so they are recognised correctly (min 2 characters).")
+                    Text("Use letters only so you are recognised correctly (min 2 characters).")
                 } else {
-                    Text("They should enter the name on their national ID.")
+                    Text("Enter the name on your national ID.")
                 }
             },
             isError = fullName.isNotEmpty() && !fullNameOk,
@@ -443,13 +348,12 @@ private fun AccountCreationPanel(
             onValueChange = { emailOrPhone = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Email or Phone Number") },
-            placeholder = { Text("They can use their email or phone number") },
-            leadingIcon = { Icon(Icons.Filled.Email, contentDescription = "Email or phone") },
+            placeholder = { Text("Enter your email or phone number...") },
             supportingText = {
                 if (emailOrPhone.isNotEmpty() && !contactOk) {
-                    Text("Enter a valid email or phone number so they can be reached.")
+                    Text("Enter a valid email or phone number so we can reach you.")
                 } else {
-                    Text("They will receive their verification code here.")
+                    Text("You will receive your verification code here.")
                 }
             },
             isError = emailOrPhone.isNotEmpty() && !contactOk,
@@ -464,8 +368,7 @@ private fun AccountCreationPanel(
             onValueChange = { password = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Password") },
-            placeholder = { Text("They should choose a private password (min 6 characters)") },
-            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = "Password") },
+            placeholder = { Text("Create your password (min. 6 characters)...") },
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(
@@ -480,7 +383,7 @@ private fun AccountCreationPanel(
                 if (password.isNotEmpty() && !passwordOk) {
                     Text("Password must be at least 6 characters long.")
                 } else {
-                    Text("They should keep their password secret from others.")
+                    Text("Keep your password secret from others.")
                 }
             },
             isError = password.isNotEmpty() && !passwordOk,
@@ -494,8 +397,7 @@ private fun AccountCreationPanel(
             onValueChange = { confirmPassword = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Confirm Password") },
-            placeholder = { Text("They should repeat their password to confirm it") },
-            leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = "Confirm password") },
+            placeholder = { Text("Confirm your password...") },
             trailingIcon = {
                 IconButton(onClick = { confirmVisible = !confirmVisible }) {
                     Icon(
@@ -508,9 +410,9 @@ private fun AccountCreationPanel(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             supportingText = {
                 if (confirmPassword.isNotEmpty() && !confirmOk) {
-                    Text("Their passwords must match perfectly before they continue.")
+                    Text("Your passwords must match perfectly before you continue.")
                 } else {
-                    Text("They confirm their password so nothing is mistyped.")
+                    Text("Confirm your password so nothing is mistyped.")
                 }
             },
             isError = confirmPassword.isNotEmpty() && !confirmOk,
@@ -601,7 +503,7 @@ private fun AccountCreationPanel(
             )
         ) {
             Text(
-                if (isSaving) "Creating their account…" else "Create Account",
+                if (isSaving) "Creating your M-AgriLink Account..." else "Create Account",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -609,7 +511,7 @@ private fun AccountCreationPanel(
         if (submitted && !isFormValid) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "They still need to fix the highlighted fields before they can continue.",
+                text = "Please fix the highlighted fields before you continue.",
                 fontSize = 12.sp,
                 color = Color(0xFFB71C1C),
                 textAlign = TextAlign.Center
@@ -617,7 +519,7 @@ private fun AccountCreationPanel(
         }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "By creating an account they agree to keep their harvest data protected.",
+            text = "By creating an account you agree to keep your harvest data protected.",
             fontSize = 11.sp,
             lineHeight = 15.sp,
             color = Color.Gray,

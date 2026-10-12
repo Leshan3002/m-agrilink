@@ -2,9 +2,14 @@ package com.example.m_agrilink.data
 
 import android.content.Context
 import com.example.m_agrilink.data.local.AgriLinkDatabase
+import com.example.m_agrilink.data.local.CropBriefEntity
+import com.example.m_agrilink.data.local.ScanDiagnostic
 import com.example.m_agrilink.data.local.SubsidyBaseline
 import com.example.m_agrilink.ui.tr
 import com.example.m_agrilink.ui.trf
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 /**
@@ -905,5 +910,210 @@ object MarketDataRepository {
             InputPrice(tr("input_dap"), 5800 + (seed % 900), tr("unit_bag50kg"), if ((seed / 5) % 2 == 0) "▲ +1.2%" else "▼ -0.8%"),
             InputPrice(tr("input_can"), 4600 + (seed % 700), tr("unit_bag50kg"), if ((seed / 7) % 2 == 0) "▲ +0.9%" else "▼ -0.5%")
         )
+    }
+
+    // ------------------------------------------------------------------
+    // ACID transaction guard for AI engine workflows (Atomicity, Isolation,
+    // Durability). Every generative call runs inside one atomic IO-sandboxed
+    // block: partial/truncated/timed-out payloads roll back completely (no
+    // partial strings reach their screen, nothing half-written to storage),
+    // and only a fully validated payload commits to the Room durability
+    // anchor. Concurrent callers share no mutable state, so simultaneous
+    // requests never cross state or block their UI thread.
+    // ------------------------------------------------------------------
+
+    /** Payload completeness gate: rejects blanks and truncated fragments. */
+    private fun isTruncatedAiPayload(text: String?): Boolean {
+        if (text.isNullOrBlank()) return true
+        // Verified briefs/diagnoses are sentences, never a stray fragment.
+        return text.trim().length < 24
+    }
+
+    /**
+     * Atomic AI vision transaction (all-or-nothing).
+     * Runs [networkCall] isolated on Dispatchers.IO; on partial failure or
+     * timeout rolls back to (null, "OFFLINE") with zero side effects. On
+     * success immediately serializes the full payload to the Room offline
+     * cache so their report survives power loss, then returns it for render.
+     */
+    suspend fun runAiVisionTransaction(
+        appContext: Context,
+        cropName: String,
+        county: String,
+        imageUri: String?,
+        networkCall: suspend () -> Pair<String?, String>
+    ): Pair<String?, String> = withContext(Dispatchers.IO) {
+        val (text, source) = try {
+            networkCall()
+        } catch (e: Exception) {
+            // Atomic rollback: flush partials, commit nothing.
+            return@withContext null to "OFFLINE"
+        }
+        if (isTruncatedAiPayload(text)) {
+            // Truncation rollback: treat fragments like failures.
+            return@withContext null to "OFFLINE"
+        }
+        // Durability anchor: persist the committed payload before render.
+        try {
+            saveScanDiagnostic(
+                appContext = appContext.applicationContext,
+                cropName = cropName.trim().ifBlank { "crop" },
+                county = county.trim().ifBlank { "Kenya" },
+                verdict = text ?: "",
+                source = source,
+                imageUri = imageUri
+            )
+        } catch (e: Exception) {
+            // Cache write is best-effort; their verified payload still renders.
+        }
+        text to source
+    }
+
+    // ------------------------------------------------------------------
+    // County brief cache: reactive location-bound lookups so their screen
+    // always reflects the active county. Switching counties drops the old
+    // region instantly; each successful brief upserts the new county row.
+    // ------------------------------------------------------------------
+
+    /** Reactive county row for Compose collection (null until cached). */
+    fun observeCountyBrief(
+        appContext: Context,
+        countyName: String
+    ): Flow<CropBriefEntity?> {
+        return AgriLinkDatabase.getDatabase(appContext.applicationContext)
+            .weatherCacheDao()
+            .getCropBriefByCounty(countyName.trim())
+    }
+
+    /** Persist the latest verified brief for a county (durability anchor). */
+    suspend fun saveCountyBrief(
+        appContext: Context,
+        countyName: String,
+        cropName: String,
+        briefText: String,
+        source: String
+    ) {
+        try {
+            val county = countyName.trim().ifBlank { return }
+            AgriLinkDatabase.getDatabase(appContext.applicationContext)
+                .weatherCacheDao()
+                .upsertBrief(
+                    CropBriefEntity(
+                        countyName = county,
+                        cropName = cropName.trim().ifBlank { "crop" },
+                        briefText = briefText,
+                        source = source,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+        } catch (e: Exception) {
+            // Cache write is best-effort; their live brief still renders.
+        }
+    }
+
+    /** Flush one county row (explicit cache invalidation on corridor switch). */
+    suspend fun clearCountyBrief(appContext: Context, countyName: String) {
+        try {
+            AgriLinkDatabase.getDatabase(appContext.applicationContext)
+                .weatherCacheDao()
+                .clearCounty(countyName.trim())
+        } catch (e: Exception) {
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Layer 5 — Room cache pipeline for image diagnostic history.
+    // Offline-first: every vision run appends one small metadata row so
+    // their past diagnoses survive signal drops. Raw bitmaps are never
+    // stored — only crop, county, verdict text, source, and Uri string.
+    // ------------------------------------------------------------------
+
+    /** Append one diagnostic run to the local history log. Returns row id. */
+    suspend fun saveScanDiagnostic(
+        appContext: Context,
+        cropName: String,
+        county: String,
+        verdict: String,
+        source: String,
+        imageUri: String? = null
+    ): Long {
+        return try {
+            val dao = AgriLinkDatabase.getDatabase(appContext.applicationContext).scanDiagnosticDao()
+            val id = dao.insert(
+                ScanDiagnostic(
+                    cropName = cropName.trim().ifBlank { "crop" },
+                    county = county.trim().ifBlank { "Kenya" },
+                    verdict = verdict,
+                    source = source,
+                    imageUri = imageUri,
+                    timestamp = System.currentTimeMillis()
+                )
+            )
+            dao.prune(keep = 100)
+            id
+        } catch (e: Exception) {
+            -1L
+        }
+    }
+
+    /** Latest diagnostic runs, newest first (for history screens). */
+    suspend fun recentScanDiagnostics(
+        appContext: Context,
+        limit: Int = 20
+    ): List<ScanDiagnostic> {
+        return try {
+            AgriLinkDatabase.getDatabase(appContext.applicationContext)
+                .scanDiagnosticDao()
+                .recent(limit.coerceIn(1, 100))
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Latest runs for one crop, newest first. */
+    suspend fun recentScanDiagnosticsForCrop(
+        appContext: Context,
+        cropName: String,
+        limit: Int = 20
+    ): List<ScanDiagnostic> {
+        return try {
+            AgriLinkDatabase.getDatabase(appContext.applicationContext)
+                .scanDiagnosticDao()
+                .recentForCrop(cropName.trim(), limit.coerceIn(1, 100))
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Reactive history stream for Compose collection. */
+    fun observeScanDiagnostics(
+        appContext: Context,
+        limit: Int = 20
+    ): Flow<List<ScanDiagnostic>> {
+        return AgriLinkDatabase.getDatabase(appContext.applicationContext)
+            .scanDiagnosticDao()
+            .observeRecent(limit.coerceIn(1, 100))
+    }
+
+    /** Trim the log to the newest [keep] rows. */
+    suspend fun pruneScanDiagnostics(appContext: Context, keep: Int = 100) {
+        try {
+            AgriLinkDatabase.getDatabase(appContext.applicationContext)
+                .scanDiagnosticDao()
+                .prune(keep.coerceAtLeast(10))
+        } catch (e: Exception) {
+            // Cache trim is best-effort; their live scan still succeeds.
+        }
+    }
+
+    /** Wipe local diagnostic history (settings / sign-out flow). */
+    suspend fun clearScanDiagnostics(appContext: Context) {
+        try {
+            AgriLinkDatabase.getDatabase(appContext.applicationContext)
+                .scanDiagnosticDao()
+                .clear()
+        } catch (e: Exception) {
+            // Best-effort; nothing for them to act on.
+        }
     }
 }

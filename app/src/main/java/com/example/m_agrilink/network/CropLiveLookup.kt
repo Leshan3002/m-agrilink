@@ -51,7 +51,9 @@ interface OpenFarmApi {
  */
 class CropLiveLookup(context: Context) {
 
-    private val dao = AgriLinkDatabase.getDatabase(context.applicationContext).farmerDao()
+    private val appContext = context.applicationContext
+    private val dao = AgriLinkDatabase.getDatabase(appContext).farmerDao()
+    private val briefDao = AgriLinkDatabase.getDatabase(appContext).weatherCacheDao()
 
     private val gemini = GeminiRepository(SecureKeyVault.snapshot())
 
@@ -79,26 +81,58 @@ class CropLiveLookup(context: Context) {
         humidity: Int,
         wind: Double
     ): Pair<String, String> = withContext(Dispatchers.IO) {
-        val key = crop.trim().lowercase()
+        val countyKey = county.trim().ifBlank { "Kenya" }
+        // County-scoped cache key: Baringo rows can never satisfy Wajir.
+        val key = "${countyKey.lowercase()}|${crop.trim().lowercase()}"
+
+        // County durability anchor: return cached rows only when they belong
+        // to the active county so stale regions never leak across switches.
+        try {
+            briefDao.getCropBriefOnce(countyKey)?.let { row ->
+                if (row.cropName.equals(crop.trim(), ignoreCase = true) && row.briefText.isNotBlank()) {
+                    return@withContext row.briefText to row.source
+                }
+            }
+        } catch (e: Exception) {
+        }
 
         dao.getLiveBrief(key)?.let { return@withContext it.directives to "CACHE" }
 
         geminiBrief(crop.trim(), county, temp, humidity, wind)?.let { text ->
             dao.saveLiveBrief(CropAdvisory(cropName = key, seasonalMarker = "LIVE_BRIEF", directives = text))
+            anchorCountyBrief(countyKey, crop.trim(), text, "GEMINI")
             return@withContext text to "GEMINI"
         }
 
         openFarmBrief(crop.trim())?.let { text ->
             dao.saveLiveBrief(CropAdvisory(cropName = key, seasonalMarker = "LIVE_BRIEF", directives = text))
+            anchorCountyBrief(countyKey, crop.trim(), text, "OPENFARM")
             return@withContext text to "OPENFARM"
         }
 
         wikiBrief(crop.trim())?.let { text ->
             dao.saveLiveBrief(CropAdvisory(cropName = key, seasonalMarker = "LIVE_BRIEF", directives = text))
+            anchorCountyBrief(countyKey, crop.trim(), text, "WIKI")
             return@withContext text to "WIKI"
         }
 
         "No verified brief found for \"$crop\" yet. Check the spelling or reconnect and try again." to "OFFLINE"
+    }
+
+    /** Best-effort county row upsert; never fails their live lookup. */
+    private suspend fun anchorCountyBrief(county: String, crop: String, text: String, source: String) {
+        try {
+            briefDao.upsertBrief(
+                com.example.m_agrilink.data.local.CropBriefEntity(
+                    countyName = county,
+                    cropName = crop.ifBlank { "crop" },
+                    briefText = text,
+                    source = source,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        } catch (e: Exception) {
+        }
     }
 
     private suspend fun geminiBrief(crop: String, county: String, temp: Double, humidity: Int, wind: Double): String? {

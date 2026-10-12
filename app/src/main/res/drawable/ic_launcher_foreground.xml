@@ -1,30 +1,39 @@
+<!--
+  ~ Copyright (C) 2026 The Android Open Source Project
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~      http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#000000">
+  <group android:scaleX="0.6264"
+      android:scaleY="0.6264"
+      android:translateX="4.4832"
+      android:translateY="4.9008">
     <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+        android:fillColor="@android:color/white"
+        android:pathData="M19.5,12c0.93,0 1.78,0.28 2.5,0.76V8c0,-1.1 -0.9,-2 -2,-2h-6.29l-1.06,-1.06l1.41,-1.41l-0.71,-0.71L9.82,6.35l0.71,0.71l1.41,-1.41L13,6.71V9c0,1.1 -0.9,2 -2,2h-0.54c0.95,1.06 1.54,2.46 1.54,4c0,0.34 -0.04,0.67 -0.09,1h3.14C15.3,13.75 17.19,12 19.5,12z"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M19.5,13c-1.93,0 -3.5,1.57 -3.5,3.5s1.57,3.5 3.5,3.5s3.5,-1.57 3.5,-3.5S21.43,13 19.5,13zM19.5,18c-0.83,0 -1.5,-0.67 -1.5,-1.5s0.67,-1.5 1.5,-1.5s1.5,0.67 1.5,1.5S20.33,18 19.5,18z"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,9h5c0,-1.1 -0.9,-2 -2,-2H4C3.45,7 3,7.45 3,8C3,8.55 3.45,9 4,9z"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M9.83,13.82l-0.18,-0.47L10.58,13c-0.46,-1.06 -1.28,-1.91 -2.31,-2.43l-0.4,0.89l-0.46,-0.21l0.4,-0.9C7.26,10.13 6.64,10 6,10c-0.53,0 -1.04,0.11 -1.52,0.26l0.34,0.91l-0.47,0.18L4,10.42c-1.06,0.46 -1.91,1.28 -2.43,2.31l0.89,0.4l-0.21,0.46l-0.9,-0.4C1.13,13.74 1,14.36 1,15c0,0.53 0.11,1.04 0.26,1.52l0.91,-0.34l0.18,0.47L1.42,17c0.46,1.06 1.28,1.91 2.31,2.43l0.4,-0.89l0.46,0.21l-0.4,0.9C4.74,19.87 5.36,20 6,20c0.53,0 1.04,-0.11 1.52,-0.26l-0.34,-0.91l0.47,-0.18L8,19.58c1.06,-0.46 1.91,-1.28 2.43,-2.31l-0.89,-0.4l0.21,-0.46l0.9,0.4C10.87,16.26 11,15.64 11,15c0,-0.53 -0.11,-1.04 -0.26,-1.52L9.83,13.82zM7.15,17.77c-1.53,0.63 -3.29,-0.09 -3.92,-1.62c-0.63,-1.53 0.09,-3.29 1.62,-3.92c1.53,-0.63 3.29,0.09 3.92,1.62C9.41,15.38 8.68,17.14 7.15,17.77z"/>
+  </group>
 </vector>

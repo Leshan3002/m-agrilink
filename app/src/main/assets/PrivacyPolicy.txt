@@ -1,0 +1,49 @@
+M-AGRILINK PRIVACY POLICY
+Last Updated: October 8, 2026
+
+1. ACCOUNT IDENTITY & PERSISTENT SESSION RETENTION
+
+All registration input they provide (Full Name, telephone registry
+parameters such as email or phone number, and encrypted passwords) is
+stored and retained locally on their mobile phone or tablet hardware
+using Android Jetpack Preferences DataStore. These persistent identity
+records are used solely to handle automatic bypass-logins on subsequent
+boot launches to save their field time. They are never transmitted to
+unauthorized third-party tracking metrics. Signing out clears their
+session snapshot; deleting their data wipes it from the device.
+
+2. LOCALIZED SENSITIVE INFORMATION HANDLERS
+
+Image payloads they capture or retrieve via Shamba Scan and typed crop
+information strings are compressed on-device and parsed by
+high-precision generative vision models. Authentication uses a
+production API key compiled from secure local device configuration at
+build time; the key is never hardcoded in source, never written to
+plaintext files, and never logged, so only a truncated fingerprint is
+ever visible in diagnostics.
+
+All returned diagnostic advisory briefs and regional climate parameters
+are stored inside an offline-first local Room SQLite cache database to
+prioritize data efficiency and prevent cellular bundle draining for
+them. Cached rows remain on their device and are pruned automatically.
+
+The application functions natively as a non-transactional informational
+ledger space. The system creator bears zero legal or financial liability
+for physical commodity transactions or off-platform logistical
+scheduling arrangements taking place in their field. They must never pay
+upfront deposits to transport operators before their produce is loaded
+and weighed.
+
+3. PERMISSIONS & DEVICE DATA
+
+Camera access is used solely when they choose to scan crops. Location
+access is used solely to fetch hyper-local weather for their field via
+keyless public forecast endpoints. Microphone access is used solely when
+they choose voice input. They may deny any permission; core offline
+features continue to work for them.
+
+4. CONTACT
+
+For privacy questions they may reach the team via the in-app Contact
+M-AgriLink Support action, which opens their mail client with a support
+draft.

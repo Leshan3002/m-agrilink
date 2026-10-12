@@ -57,9 +57,7 @@ class AiAssistantViewModel : ViewModel() {
     init {
         messages.add(
             ChatMessage(
-                "Habari! 👋 I'm Shamba, your farm friend. Tell me how your crops, " +
-                    "cattle or farm are behaving — in English or Kiswahili — and I'll " +
-                    "suggest what to do next. 👇 Or tap a quick question below!",
+                "Ask Shamba AI Engine Active. Input inquiries regarding livestock management, soil moisture parameters, or crop protection guidelines to generate localized technical advisories in English or Kiswahili.",
                 isUser = false
             )
         )
@@ -118,7 +116,7 @@ class AiAssistantViewModel : ViewModel() {
             return
         }
 
-        val loadingPlaceholder = ChatMessage("🤔 Thinking about ${telemetry.location}...", isUser = false)
+        val loadingPlaceholder = ChatMessage("🔍 Analyzing your question…", isUser = false)
         messages.add(loadingPlaceholder)
 
         // Network runs off the main thread; bubbles update back on Main.

@@ -13,8 +13,8 @@ import net.sqlcipher.database.SupportFactory
  * Offline-first Room database. No payment gateway entities (informational build).
  */
 @Database(
-    entities = [CropAdvisory::class, HydrologicalAlert::class, ExpertForumPost::class, FarmerProfile::class, CropSearchHistory::class, SubsidyBaseline::class],
-    version = 7,
+    entities = [CropAdvisory::class, HydrologicalAlert::class, ExpertForumPost::class, FarmerProfile::class, CropSearchHistory::class, SubsidyBaseline::class, ScanDiagnostic::class, CropBriefEntity::class],
+    version = 9,
     exportSchema = false
 )
 abstract class AgriLinkDatabase : RoomDatabase() {
@@ -22,6 +22,10 @@ abstract class AgriLinkDatabase : RoomDatabase() {
     abstract fun farmerDao(): FarmerDao
 
     abstract fun subsidyDao(): SubsidyDao
+
+    abstract fun scanDiagnosticDao(): ScanDiagnosticDao
+
+    abstract fun weatherCacheDao(): WeatherCacheDao
 
     companion object {
         @Volatile
@@ -79,6 +83,22 @@ abstract class AgriLinkDatabase : RoomDatabase() {
             }
         }
 
+        // v8 Layer 5: image diagnostic history cache (offline vision log).
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `scan_diagnostic` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `cropName` TEXT NOT NULL, `county` TEXT NOT NULL, `verdict` TEXT NOT NULL, `source` TEXT NOT NULL, `imageUri` TEXT, `timestamp` INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_scan_diagnostic_timestamp` ON `scan_diagnostic` (`timestamp`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_scan_diagnostic_cropName_timestamp` ON `scan_diagnostic` (`cropName`, `timestamp`)")
+            }
+        }
+
+        // v9: county brief cache (location-scoped durability anchor, one row per county).
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `crop_brief_table` (`countyName` TEXT PRIMARY KEY NOT NULL, `cropName` TEXT NOT NULL, `briefText` TEXT NOT NULL, `source` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL)")
+            }
+        }
+
         fun getDatabase(context: Context): AgriLinkDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -90,7 +110,7 @@ abstract class AgriLinkDatabase : RoomDatabase() {
                     "magrilink_database"
                 )
                 .openHelperFactory(SupportFactory(passphrase))
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                 .fallbackToDestructiveMigration()
                 .build()

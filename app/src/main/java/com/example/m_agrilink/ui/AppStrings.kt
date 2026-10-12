@@ -227,7 +227,7 @@ private val EN = mapOf(
     "scan_full_prefix" to "Live lens match (%1\$s): %2\$s (%3\$d%% confidence via %4\$s).",
     "scan_full_google" to "🔎 Google AI (%1\$s): %2\$s",
     "wx_rain_badge" to "🌧️ Active Rainfall Detected at the GPS Location.",
-    "wx_rain_advisory" to "☔ Field Advisory: Active rain showers confirmed over their plot. Immediately suspend all open fertilizer spraying or pesticide applications to avoid direct crop washouts.",
+    "wx_rain_advisory" to "☔ Field Advisory: Active rain showers confirmed over your plot. Immediately suspend all open fertilizer spraying or pesticide applications to avoid direct crop washouts.",
     "wx_src_owm" to "OpenWeatherMap live",
     "faq_title" to "❓ Frequently Asked Questions",
     "faq_expand" to "Expand answer",
@@ -450,7 +450,28 @@ private val EN = mapOf(
     "body_maize_1" to "🌿 PUSH-PULL BIOLOGICAL STRATEGY (icipe Kenya): Intercrop their maize rows cleanly with Desmodium (repels the moths away via chemical volatilization) and plant Napier Grass or Brachiaria along their field perimeters as an attractive trap crop. This method cuts pest pressure by over 70% naturally.",
     "body_maize_2" to "🐛 SCOUTING & CULTURAL REMEDIES (CABI Plantwise): Perform structural field scouting twice a week. Handpick and destroy visible egg masses or caterpillars immediately. Crushing caterpillars against leaf whorls prevents secondary lifecycle generations.",
     "body_maize_3" to "🧪 TIMED CHEMICAL EMERGENCY ACTION (CIMMYT & FAO): If leaf damage indices surpass a 20% infestation threshold across young stalks, apply targeted bio-rationals or registered chemical options such as Spinetoram or Spinosad directly down into the whorls. Alternate chemical classes to completely halt pest resistance build-up.",
-    "body_general" to "🌿 MANAGEMENT ADVISORY: Maintain proper plant row spacing to improve air circulation and reduce leaf wetness. Prune infected lower leaves immediately. Avoid overhead irrigation during cold evenings to limit fungal spore tracking across their plot."
+    "body_general" to "🌿 MANAGEMENT ADVISORY: Maintain proper plant row spacing to improve air circulation and reduce leaf wetness. Prune infected lower leaves immediately. Avoid overhead irrigation during cold evenings to limit fungal spore tracking across their plot.",
+    "sscan_title" to "🤖 Shamba Scan",
+    "sscan_back" to "Back",
+    "sscan_lang" to "Language",
+    "sscan_crop_label" to "What crop are you scanning?",
+    "sscan_crop_placeholder" to "Target crop (e.g., Passion Fruit)...",
+    "sscan_add_photo" to "📁 Add Photo",
+    "sscan_send" to "Send",
+    "sscan_remove" to "Remove photo",
+    "sscan_photo_desc" to "Selected crop photo",
+    "sscan_welcome" to "Welcome to Shamba Scan. Please enter your crop details and add a photo to begin your dynamic agronomic analysis.",
+    "sscan_vision_title" to "🔬 Gemini Vision",
+    "sscan_analyzing" to "Analyzing photo…",
+    "sscan_network_error" to "Vision Service Unreachable — Connection timed out. Your image has been preserved. Please check your data signal and tap below to try again.",
+    "sscan_retry" to "🔄 Retry Diagnostic Scan",
+    "sscan_retry_desc" to "Retry",
+    "sscan_need_photo" to "They need to add a photo first — their words alone cannot be diagnosed. They can tap 📁 Add Photo and retry.",
+    "sscan_decode_fail" to "Their photo could not be decoded. They can pick a different image and retry.",
+    "sscan_prefix" to "Scanning crop: %1\$s",
+    "sscan_banner_title" to "Not sure where to start? Ask Shamba AI.",
+    "sscan_banner_sub" to "Your AI farming assistant. Tell me what you sell, plant, or need help with.",
+    "sscan_banner_open" to "Open Shamba AI assistant"
 )
 
 private val SW = mapOf(
@@ -893,7 +914,28 @@ private val SW = mapOf(
     "adv_sorghum_harvest" to "Vuna suke nafaka inapokuwa ngumu na <13.5% unyevu. Pura, pepeta na kausha zaidi hadi kiwango cha 13.5% kwa hifadhi salama.",
     "adv_custom_land" to "Maandalizi ya Shamba KALRO (%1\$s): Andaa kitanda kirefu kinachopitisha maji mvua zinapoanza. Weka samadi iliyooza + mbolea ya msingi kwa kipimo cha udongo.",
     "adv_custom_space" to "Nafasi za Kupanda (%1\$s): Weka nafasi ya mwavuli kamili kwa mwongozo wa safu wa KALRO; tandaza matandazo kushika unyevu.",
-    "adv_custom_harvest" to "Vuna %1\$s ukikomaa kabisa na kausha hadi kiwango salama cha 13.5% kabla ya kuhifadhi au kuuza."
+    "adv_custom_harvest" to "Vuna %1\$s ukikomaa kabisa na kausha hadi kiwango salama cha 13.5% kabla ya kuhifadhi au kuuza.",
+    "sscan_title" to "🤖 Shamba Scan",
+    "sscan_back" to "Rudi",
+    "sscan_lang" to "Lugha",
+    "sscan_crop_label" to "Unachanganua zao gani?",
+    "sscan_crop_placeholder" to "Zao lengwa (k.m., Passion Fruit)...",
+    "sscan_add_photo" to "📁 Weka Picha",
+    "sscan_send" to "Tuma",
+    "sscan_remove" to "Ondoa picha",
+    "sscan_photo_desc" to "Picha ya zao iliyochaguliwa",
+    "sscan_welcome" to "Karibu Shamba Scan. Andika maelezo ya zao lako na uweke picha ili kuanza uchambuzi wa kilimo.",
+    "sscan_vision_title" to "🔬 Maono ya Gemini",
+    "sscan_analyzing" to "Inachambua picha…",
+    "sscan_network_error" to "Huduma ya Maono Haipatikani — Muunganisho umekatika. Picha yako imehifadhiwa. Angalia mtandao wako na uguse hapa chini ili ujaribu tena.",
+    "sscan_retry" to "🔄 Jaribu Uchambuzi Tena",
+    "sscan_retry_desc" to "Jaribu tena",
+    "sscan_need_photo" to "Wanahitaji kuweka picha kwanza — maneno yao pekee hayawezi kutambuliwa. Wanaweza kugusa 📁 Weka Picha na kujaribu tena.",
+    "sscan_decode_fail" to "Picha yao haikuweza kusomwa. Wanaweza kuchagua picha nyingine na kujaribu tena.",
+    "sscan_prefix" to "Inachanganua zao: %1\$s",
+    "sscan_banner_title" to "Hujiamini pa kuanzia? Uliza Shamba AI.",
+    "sscan_banner_sub" to "Msaidizi wako wa kilimo wa AI. Niambie unachouza, unachopanda, au unachohitaji msaada nacho.",
+    "sscan_banner_open" to "Fungua msaidizi wa Shamba AI"
 )
 
 /** Plain lookup (safe in non-composable code): Kiswahili → fallback English → key. */

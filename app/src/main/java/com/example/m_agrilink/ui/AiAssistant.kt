@@ -50,12 +50,14 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import com.example.m_agrilink.data.AppLocale
 import java.util.Locale
 
 /**
@@ -82,11 +84,132 @@ data class TelemetryContext(
 )
 
 /**
- * Structural Strategy: 
- * Jetpack Compose is used for the AI Assistant overlay. 
- * It allows for a lightweight, state-driven UI that remains independent of the 
+ * Structural Strategy:
+ * Jetpack Compose is used for the AI Assistant overlay.
+ * It allows for a lightweight, state-driven UI that remains independent of the
  * main dashboard's scroll state while sharing the same ViewModel context.
  */
+
+/**
+ * Kenyan-accented TTS binding for chat readout: Kiswahili mode speaks sw-KE,
+ * otherwise Kenyan English (en-KE) at a clear .95f pace so they can follow
+ * dense advisories. Thread-isolated callers invoke this on the main thread;
+ * speech itself streams off-main. Telemetry wording uses they/their/them.
+ */
+internal fun applyChatTtsLocale(tts: TextToSpeech) {
+    try {
+        if (AppLocale.isSwahili) {
+            tts.setLanguage(Locale("sw", "KE"))
+        } else {
+            val result = tts.setLanguage(Locale("en", "KE"))
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                tts.setLanguage(Locale.US)
+            }
+        }
+        tts.setSpeechRate(0.95f)
+        tts.setPitch(1.0f)
+    } catch (e: Exception) {
+    }
+}
+
+/** Strip emoji so the voice reads words for them, not symbol names. */
+internal fun chatSpeakableText(s: String): String =
+    s.replace(ChatLinkPattern, " ").replace(Regex("[\\p{So}\\p{Sk}•●▲▼★☆→➔*]+"), " ").replace(Regex("\\s+"), " ").trim()
+
+/**
+ * Kenyan media controller hub: minimalist text-only Play / Pause / Stop row
+ * under assistant bubbles. Pause calls tts.stop() but keeps a resume offset
+ * so they do not lose their place; Stop purges the thread and resets flags.
+ */
+@Composable
+private fun ChatAudioHub(
+    textToSpeech: TextToSpeech?,
+    textToRead: String,
+    modifier: Modifier = Modifier
+) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var isPaused by remember { mutableStateOf(false) }
+    var resumeOffset by remember(textToRead) { mutableStateOf(0) }
+    val readable = remember(textToRead) { chatSpeakableText(textToRead) }
+    val playable = remember(readable, resumeOffset) {
+        if (resumeOffset in 1 until readable.length) readable.drop(resumeOffset) else readable
+    }
+    DisposableEffect(textToSpeech) {
+        val listener = object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) { }
+            override fun onDone(utteranceId: String?) {
+                isPlaying = false
+                isPaused = false
+                resumeOffset = 0
+            }
+            override fun onError(utteranceId: String?) {
+                isPlaying = false
+                isPaused = false
+            }
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                resumeOffset = start
+            }
+        }
+        try {
+            textToSpeech?.setOnUtteranceProgressListener(listener)
+        } catch (e: Exception) {
+        }
+        onDispose { }
+    }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = {
+                val tts = textToSpeech ?: return@TextButton
+                if (playable.isBlank()) return@TextButton
+                try {
+                    applyChatTtsLocale(tts)
+                    tts.stop()
+                    isPaused = false
+                    isPlaying = true
+                    playable.chunked(400).forEach { chunk ->
+                        tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, "chat_media_hub")
+                    }
+                } catch (e: Exception) {
+                    isPlaying = false
+                }
+            },
+            enabled = textToSpeech != null && readable.isNotBlank() && !isPlaying
+        ) {
+            Text("▶️ Play Audio", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6B325))
+        }
+        TextButton(
+            onClick = {
+                try {
+                    textToSpeech?.stop()
+                } catch (e: Exception) {
+                }
+                isPlaying = false
+                isPaused = true
+            },
+            enabled = isPlaying
+        ) {
+            Text("⏸️ Pause", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF5F5F5))
+        }
+        TextButton(
+            onClick = {
+                try {
+                    textToSpeech?.stop()
+                } catch (e: Exception) {
+                }
+                isPlaying = false
+                isPaused = false
+                resumeOffset = 0
+            },
+            enabled = isPlaying || isPaused
+        ) {
+            Text("⏹️ Stop", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF5F5F5))
+        }
+    }
+}
 @Composable
 fun AiChatOverlay(
     telemetry: TelemetryContext,
@@ -108,7 +231,8 @@ fun AiChatOverlay(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(0.8f),
+            .fillMaxHeight(0.8f)
+            .imePadding(),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         tonalElevation = 8.dp,
         color = Color.White
@@ -121,9 +245,7 @@ fun AiChatOverlay(
             var tts: TextToSpeech? = null
             tts = TextToSpeech(chatContext) { status ->
                 if (status == TextToSpeech.SUCCESS) {
-                    tts?.setLanguage(Locale.US)
-                    tts?.setSpeechRate(0.95f)
-                    tts?.setPitch(1.0f)
+                    tts?.let { applyChatTtsLocale(it) }
                 }
             }
             chatTts = tts
@@ -283,15 +405,26 @@ fun AiChatOverlay(
                     ) {
                         ChatBubble(
                             message = message,
+                            textToSpeech = chatTts,
                             onSpeak = { text ->
                                 if (AppAudioGate.muted) {
                                     AppAudioGate.muted = false
-                                    val spoken = text.replace(ChatLinkPattern, "").replace(Regex("[ \\t]+"), " ").trim()
-                                    spoken.chunked(400).forEach { chunk ->
-                                        chatTts?.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
+                                    val tts = chatTts
+                                    if (tts != null) {
+                                        try {
+                                            applyChatTtsLocale(tts)
+                                        } catch (e: Exception) {
+                                        }
+                                        val spoken = chatSpeakableText(text)
+                                        spoken.chunked(400).forEach { chunk ->
+                                            tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
+                                        }
                                     }
                                 } else {
-                                    chatTts?.stop()
+                                    try {
+                                        chatTts?.stop()
+                                    } catch (e: Exception) {
+                                    }
                                     AppAudioGate.muted = true
                                 }
                             }
@@ -300,7 +433,8 @@ fun AiChatOverlay(
                 }
             }
 
-            // Friendly quick questions (tap instead of typing)
+            // Quick questions (tap instead of typing): dark organic green chips
+            // with high-contrast white/gold labels so they stay readable in sun.
             if (messages.none { it.isUser }) {
                 Row(
                     modifier = Modifier
@@ -309,13 +443,21 @@ fun AiChatOverlay(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
-                        "🌽 Holes in my maize leaves",
-                        "🐄 My cow gives less milk",
-                        "🌱 Yellow leaves on beans",
-                        "🐔 My chickens are coughing"
-                    ).forEach { suggestion ->
-                        OutlinedButton(onClick = { viewModel.sendMessage(suggestion, telemetry) }) {
-                            Text(suggestion, fontSize = 12.sp)
+                        "🥭 Mango Management" to "Mango management",
+                        "🥛 Milk Production Yields" to "Milk production yields",
+                        "🌱 Bean Protection" to "Bean protection",
+                        "🐄 Livestock Health" to "Livestock health"
+                    ).forEach { (label, query) ->
+                        Button(
+                            onClick = { viewModel.sendMessage(query, telemetry) },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF1B4332),
+                                contentColor = Color.White
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -485,6 +627,7 @@ private fun LinkPreviewCard(
 fun ChatBubble(
     message: ChatMessage,
     modifier: Modifier = Modifier,
+    textToSpeech: TextToSpeech? = null,
     onSpeak: ((String) -> Unit)? = null
 ) {
     Box(
@@ -581,6 +724,13 @@ fun ChatBubble(
                 }
                 if (!message.isUser) {
                     val links = remember(message.text) { extractChatLinks(message.text) }
+                    if (textToSpeech != null && message.text.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        ChatAudioHub(
+                            textToSpeech = textToSpeech,
+                            textToRead = message.text
+                        )
+                    }
                     if (links.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         links.forEach { url ->

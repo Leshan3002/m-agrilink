@@ -12,11 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.ShowChart
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -54,8 +50,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.Uri
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
@@ -64,6 +62,7 @@ import android.util.Size
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.m_agrilink.data.MarketDataRepository
+import com.example.m_agrilink.data.local.AgriLinkDatabase
 import com.example.m_agrilink.data.SaccoTelemetry
 import com.example.m_agrilink.data.AgronomicAdvisory
 import com.example.m_agrilink.data.AppLocale
@@ -110,30 +109,178 @@ private fun advisoryField(a: AgronomicAdvisory, field: String): String {
 }
 
 
-/** Shared TTS locale policy: Swahili voice in Kiswahili mode, else US English. */
+/** Shared TTS locale policy: Kenyan English (en-KE), Swahili (sw-KE) in Kiswahili mode. */
 internal fun applyTtsLocale(tts: TextToSpeech) {
     // M-AgriLink Core Engine.
-    // Voice follows the Language picker: Kiswahili mode speaks Swahili (sw-KE when
-    // the engine has it, else generic Swahili), English mode speaks US English.
+    // Voice follows the Language picker so they hear their preferred language:
+    // Kiswahili mode binds sw-KE, English mode binds Kenyan English (en-KE).
+    // Slow 0.82f pace with 0.95f pitch models natural human speech.
     try {
-        val voiceLocale = if (AppLocale.isSwahili) {
-            val swKe = Locale("sw", "KE")
-            if (tts.isLanguageAvailable(swKe) >= TextToSpeech.LANG_AVAILABLE) swKe
-            else {
-                val sw = Locale("sw")
-                if (tts.isLanguageAvailable(sw) >= TextToSpeech.LANG_AVAILABLE) sw else Locale.US
-            }
+        if (AppLocale.isSwahili) {
+            tts.setLanguage(Locale("sw", "KE"))
         } else {
-            Locale.US
+            val result = tts.setLanguage(Locale("en", "KE"))
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                tts.setLanguage(Locale.US)
+            }
         }
-        tts.language = voiceLocale
+        tts.setSpeechRate(0.82f)
+        tts.setPitch(0.95f)
     } catch (e: Exception) {
+    }
+}
+
+/**
+ * Minimalist horizontal media controller hub: text-only Play / Pause / Stop
+ * row placed underneath readable cards. No decorative icons; they control
+ * playback for their own text. Pause keeps a resume offset so they do not
+ * lose their place; Stop purges the speech thread and resets state.
+ */
+@Composable
+private fun KenyanTtsMediaHub(
+    textToSpeech: TextToSpeech?,
+    textToRead: String,
+    modifier: Modifier = Modifier
+) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var isPaused by remember { mutableStateOf(false) }
+    var resumeOffset by remember(textToRead) { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val readable = remember(textToRead) { speakableTtsText(textToRead) }
+    val playable = remember(readable, resumeOffset) {
+        if (resumeOffset in 1 until readable.length) readable.drop(resumeOffset) else readable
+    }
+    DisposableEffect(textToSpeech) {
+        val listener = object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) { }
+            override fun onDone(utteranceId: String?) {
+                isPlaying = false
+                isPaused = false
+                resumeOffset = 0
+            }
+            override fun onError(utteranceId: String?) {
+                isPlaying = false
+                isPaused = false
+            }
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                resumeOffset = start
+            }
+        }
+        try {
+            textToSpeech?.setOnUtteranceProgressListener(listener)
+        } catch (e: Exception) {
+        }
+        onDispose { }
+    }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = {
+                val tts = textToSpeech ?: return@TextButton
+                if (playable.isBlank() || isPlaying) return@TextButton
+                isPaused = false
+                isPlaying = true
+                scope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            applyTtsLocale(tts)
+                            tts.stop()
+                            playable.chunked(400).forEach { chunk ->
+                                tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, "kenyan_media_hub")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        isPlaying = false
+                    }
+                }
+            },
+            enabled = textToSpeech != null && readable.isNotBlank() && !isPlaying
+        ) {
+            Text("▶️ Play Audio", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        TextButton(
+            onClick = {
+                try {
+                    textToSpeech?.stop()
+                } catch (e: Exception) {
+                }
+                isPlaying = false
+                isPaused = true
+            },
+            enabled = isPlaying
+        ) {
+            Text("⏸️ Pause", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        TextButton(
+            onClick = {
+                try {
+                    textToSpeech?.stop()
+                } catch (e: Exception) {
+                }
+                isPlaying = false
+                isPaused = false
+                resumeOffset = 0
+            },
+            enabled = isPlaying || isPaused
+        ) {
+            Text("⏹️ Stop", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
 /** Strip pictographs/bullets so the engine reads words, not emoji names. */
 internal fun speakableTtsText(s: String): String =
     s.replace(Regex("[\\p{So}\\p{Sk}•●▲▼★☆→➔*]+"), " ").replace(Regex("\\s+"), " ").trim()
+
+/**
+ * Crop intent guard: crop text fields accept plant names only.
+ * Returns true when [input] looks like a crop/plant/tree name, false for
+ * INVALID_INTENT (conversational questions). Blanks return true so no error
+ * shows before they type. Telemetry wording keeps inclusive they/their/them.
+ */
+internal const val CROP_INVALID_INTENT_MESSAGE =
+    "⚠️ Input Error: This field strictly accepts crop, plant, or tree names only (e.g., Mango, Beans, Passion Fruit). For conversational questions or farming advice, please utilize the floating Ask Shamba AI assistant in the bottom right corner."
+
+private val CROP_INTENT_QUESTION_WORDS = Regex("\\b(how|why|what|where|who|when)\\b")
+private val CROP_INTENT_QUESTION_PHRASES = Regex("\\b(is\\s+it|can\\s+i)\\b")
+
+private fun validateCropInputIntent(input: String): Boolean {
+    val trimmed = input.trim()
+    if (trimmed.isBlank()) return true
+    val lower = trimmed.lowercase()
+    if ('?' in trimmed) return false
+    if (CROP_INTENT_QUESTION_WORDS.containsMatchIn(lower)) return false
+    if (CROP_INTENT_QUESTION_PHRASES.containsMatchIn(lower)) return false
+    val words = trimmed.split(Regex("\\s+")).filter { it.isNotBlank() }
+    if (words.size > 4) {
+        val hasPlantToken = CropNameNormalizer.KNOWN_CROPS.any { lower.contains(it.lowercase()) }
+        if (!hasPlantToken) return false
+    }
+    return true
+}
+
+/**
+ * Empty-state location guard: no hardcoded regional fallback. When they have
+ * not picked a county and the device GPS provider reports disabled, the Live
+ * Crop Brief row shows an instruction panel instead of any cached regional
+ * stub. Telemetry wording keeps inclusive they/their/them.
+ */
+internal const val LOCATION_MISSING_MESSAGE =
+    "📍 Location Parameter Missing: Please activate your device GPS location tracking or select a target county from the dropdown above to generate your customized regional apiary and crop brief summaries."
+
+internal fun isGpsLocationDisabled(appContext: Context): Boolean {
+    return try {
+        val manager = appContext.applicationContext
+            .getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return true
+        !manager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    } catch (e: Exception) {
+        true
+    }
+}
 
 
 
@@ -648,6 +795,7 @@ private fun FaqSectionComponent(
     textToSpeech: TextToSpeech? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Card(
         modifier = modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
@@ -669,6 +817,30 @@ private fun FaqSectionComponent(
             Spacer(modifier = Modifier.height(8.dp))
             FaqItem(question = str("faq_q4"), answer = str("faq_a4"), textToSpeech = textToSpeech)
             Spacer(modifier = Modifier.height(10.dp))
+            // Contact Support row: launches their mail client with a
+            // pre-filled support draft so they can reach the team instantly.
+            TextButton(
+                onClick = {
+                    try {
+                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:support@magrilink.com")
+                            putExtra(Intent.EXTRA_SUBJECT, "M-AgriLink App Support Request - Version 6137")
+                            putExtra(Intent.EXTRA_TEXT, "Hello M-AgriLink Team,\n\n[Type your inquiry or feedback here]\n\n---\nUser Name: Levis Lekesio\nDevice: Testing Tablet")
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Send Email via..."))
+                    } catch (e: Exception) {
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "📩 Contact M-AgriLink Support",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFE6B325)
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "© 2026 M-AgriLink. All rights reserved.",
                 color = Color.Gray,
@@ -1219,6 +1391,66 @@ private fun MarketOverviewPage(
 }
 
 /**
+ * Ask Shamba AI floating entry: premium animated FAB pinned bottom-right.
+ * Extended pill with farmer avatar + visible "Ask Shamba AI" label so they
+ * instantly know what the floating button does. Soft looping float (4.dp
+ * vertical bob + gentle pulse) via rememberInfiniteTransition, harvest-gold
+ * ring (#E6B325) and ambient shadow. Taps route to the chat destination.
+ */
+@Composable
+private fun AskShambaFab(
+    onOpenChat: () -> Unit
+) {
+    val fabMotion = rememberInfiniteTransition(label = "shambaFabFloat")
+    val pulseScale by fabMotion.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fabPulse"
+    )
+    val bobDp by fabMotion.animateFloat(
+        initialValue = 0f,
+        targetValue = -4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fabBob"
+    )
+    ExtendedFloatingActionButton(
+        onClick = onOpenChat,
+        shape = RoundedCornerShape(28.dp),
+        containerColor = Color(0xFF064E3B),
+        contentColor = Color.White,
+        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+        modifier = Modifier
+            .padding(bottom = 16.dp, end = 16.dp)
+            .offset(y = bobDp.dp)
+            .graphicsLayer {
+                scaleX = pulseScale
+                scaleY = pulseScale
+            }
+            .shadow(8.dp, RoundedCornerShape(28.dp))
+            .border(2.dp, Color(0xFFE6B325), RoundedCornerShape(28.dp))
+    ) {
+        Text(
+            text = "\uD83D\uDC68\u200D\uD83C\uDF3E",
+            fontSize = 22.sp
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = str("shamba_title"),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+    }
+}
+
+/**
  * Shamba Scan cockpit entry: full-width glass card with a 3000ms breathing
  * glow cycling Sprout Light Green (#52B788) <-> Organic Forest Green
  * (#1B4332) across the border stroke and icon accents. The whole card is
@@ -1307,7 +1539,7 @@ private fun ShambaScanEntryCard(
     }
 }
 
-/** Leading initials for the HUD badge ("Leshan Levi" -> "LL"). */
+/** Leading initials for the HUD badge ("Levis Lekesio" -> "LL"). */
 private fun accountInitials(name: String): String {
     val parts = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     if (parts.isEmpty()) return "?"
@@ -1323,11 +1555,12 @@ private fun accountInitials(name: String): String {
 private fun ActiveAccountHud(
     displayName: String,
     displayEmail: String,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onOpenAboutUs: () -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val safeName = displayName.ifBlank { "Leshan Levi" }
-    val safeEmail = displayEmail.ifBlank { "levislekesio@gmail.com" }
+    val safeName = displayName.ifBlank { "Levis Lekesio" }
+    val userEmailState = displayEmail
     Column(horizontalAlignment = Alignment.End) {
         Surface(
             shape = CircleShape,
@@ -1394,13 +1627,13 @@ private fun ActiveAccountHud(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = safeName,
+                        text = "Active Account: $safeName",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
                     )
                     Text(
-                        text = safeEmail,
+                        text = userEmailState.ifBlank { "levislekesio@gmail.com" },
                         fontSize = 12.sp,
                         color = Color.DarkGray
                     )
@@ -1419,6 +1652,19 @@ private fun ActiveAccountHud(
                         color = Color.Gray
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    // Corporate entry link: opens their About Us profile sheet.
+                    Text(
+                        text = "ℹ️ Corporate Profile & About Us",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE6B325),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onOpenAboutUs() }
+                            .padding(vertical = 6.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     OutlinedButton(
                         onClick = onLogout,
                         modifier = Modifier.fillMaxWidth(),
@@ -1447,10 +1693,12 @@ private fun ActiveAccountHud(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    displayName: String = "Leshan Levi",
+    displayName: String = "Levis Lekesio",
     displayEmail: String = "levislekesio@gmail.com",
     onLogout: () -> Unit = {},
-    onOpenScanner: () -> Unit = {}
+    onOpenScanner: () -> Unit = {},
+    onOpenChat: () -> Unit = {},
+    onOpenAboutUs: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(false) }
@@ -1507,9 +1755,7 @@ fun DashboardScreen(
         var tts: TextToSpeech? = null
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.setLanguage(Locale.US)
-                tts?.setSpeechRate(0.95f)
-                tts?.setPitch(1.0f)
+                tts?.let { applyTtsLocale(it) }
             }
         }
         textToSpeech = tts
@@ -1552,11 +1798,18 @@ fun DashboardScreen(
 
 
     val cropMatch = remember(farmerPlantedCrop) { CropNameNormalizer.normalize(farmerPlantedCrop) }
-    val cropQuery = cropMatch?.canonical ?: ""
-    val blueprintCrop = remember(cropQuery, selectedCounty) {
-        if (cropQuery.isBlank()) null
+    // Intent guard: halt market/biosecurity loops when they type a question instead of a plant name.
+    val isCropIntentInvalid = remember(farmerPlantedCrop) {
+        farmerPlantedCrop.isNotBlank() && !validateCropInputIntent(farmerPlantedCrop)
+    }
+    val cropQuery = if (isCropIntentInvalid) "" else (cropMatch?.canonical ?: "")
+    // No static regional enforcement: blank county yields no regional record.
+    val isGpsDisabled = remember(context, selectedCounty) { isGpsLocationDisabled(context) }
+    val isLocationMissing = selectedCounty.isBlank() && isGpsDisabled
+    val blueprintCrop = remember(cropQuery, selectedCounty, isCropIntentInvalid) {
+        if (cropQuery.isBlank() || isCropIntentInvalid || selectedCounty.isBlank()) null
         else MarketDataRepository.getCrop(
-            selectedCounty.ifBlank { "Baringo" },
+            selectedCounty,
             cropQuery
         )
     }
@@ -1564,7 +1817,7 @@ fun DashboardScreen(
     val liveAdvisoryText = when {
         cropKey == "maize" && activeHumidity >= 70 -> tr("adv_maize_humid")
         cropKey == "beans" && activeWindSpeed <= 10.0 -> tr("adv_beans_calm")
-        else -> trf("adv_default", activeTemperature, activeHumidity, activeWindSpeed, selectedCounty.ifBlank { "Baringo" })
+        else -> trf("adv_default", activeTemperature, activeHumidity, activeWindSpeed, selectedCounty.ifBlank { tr("out_your_county") })
     }
 
     val counties = MarketDataRepository.getCounties()
@@ -1583,6 +1836,19 @@ fun DashboardScreen(
     var liveBrief by remember { mutableStateOf<String?>(null) }
     var briefSource by remember { mutableStateOf("") }
     var liveLoading by remember { mutableStateOf(false) }
+    // Reactive county-bound cache loop: tracks selectedCounty off-main, so
+    // the moment they switch corridors (e.g. Baringo -> Wajir) stale arrays
+    // drop and only the active county's row can emit. No static values.
+    val countyBrief by remember(context.applicationContext, selectedCounty) {
+        MarketDataRepository.observeCountyBrief(context.applicationContext, selectedCounty)
+    }.collectAsState(initial = null)
+    val instantCountyBrief = remember(countyBrief, cropQuery, selectedCounty) {
+        countyBrief?.takeIf {
+            it.countyName.equals(selectedCounty, ignoreCase = true) &&
+                (cropQuery.isBlank() || it.cropName.equals(cropQuery, ignoreCase = true))
+        }?.briefText
+    }
+    val displayBrief = liveBrief ?: instantCountyBrief
     var cropHistory by remember { mutableStateOf(listOf<String>()) }
     var interestSummary by remember { mutableStateOf("") }
 
@@ -1654,18 +1920,25 @@ fun DashboardScreen(
 
     // Any-crop live brief: local 4 crops render instantly, everything else
     // resolves via cache -> Gemini -> Wikipedia (debounced, stale-guarded).
-    LaunchedEffect(cropKey, selectedCounty) {
+    // Halted when the intent guard flags INVALID_INTENT so questions never
+    // trigger market lookups for them.
+    LaunchedEffect(cropKey, selectedCounty, isCropIntentInvalid, isLocationMissing) {
         val query = cropQuery
         val requestKey = cropKey
-        if (query.isBlank()) {
-            liveBrief = null
-            liveLoading = false
+        // Instant invalidation: drop stale arrays the millisecond keys toggle
+        // so old regional text never lingers while the fresh fetch resolves.
+        liveBrief = null
+        briefSource = ""
+        liveLoading = false
+        if (query.isBlank() || isCropIntentInvalid) {
             return@LaunchedEffect
         }
-        val countyOrDefault = selectedCounty.ifBlank { "Baringo" }
+        // No Baringo stub: blank county suppresses regional lookups entirely.
+        if (selectedCounty.isBlank()) {
+            return@LaunchedEffect
+        }
+        val countyOrDefault = selectedCounty
         if (MarketDataRepository.getCrop(countyOrDefault, query) != null) {
-            liveBrief = null
-            liveLoading = false
             return@LaunchedEffect
         }
         delay(600)
@@ -1675,7 +1948,11 @@ fun DashboardScreen(
         } catch (e: Exception) {
             "Live lookup failed. Check the connection and try again." to "OFFLINE"
         }
-        if (requestKey == CropNameNormalizer.canonicalOrOriginal(farmerPlantedCrop).lowercase()) {
+        // Stale guard: apply only when both crop and county are still current,
+        // so a slow Baringo response can never overwrite fresh Wajir text.
+        if (requestKey == CropNameNormalizer.canonicalOrOriginal(farmerPlantedCrop).lowercase() &&
+            countyOrDefault == selectedCounty
+        ) {
             liveBrief = text
             briefSource = source
             liveLoading = false
@@ -1687,6 +1964,9 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        floatingActionButton = {
+            AskShambaFab(onOpenChat = onOpenChat)
+        },
         bottomBar = {
             // Mobile-style 3-button bottom navigation: Navigate • Language • Settings.
             NavigationBar(
@@ -1759,7 +2039,8 @@ fun DashboardScreen(
                     ActiveAccountHud(
                         displayName = displayName,
                         displayEmail = displayEmail,
-                        onLogout = onLogout
+                        onLogout = onLogout,
+                        onOpenAboutUs = onOpenAboutUs
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1791,7 +2072,8 @@ fun DashboardScreen(
         ShambaScanEntryCard(onOpenScanner = onOpenScanner)
 
         // --- 1-i. NATIONAL BIOSECURITY ALERT CAPSULE (county × crop pest monitor) ---
-        PestOutbreakAlertBanner(selectedCounty = selectedCounty, plantedCrop = farmerPlantedCrop)
+        // Halted on INVALID_INTENT: pass blank crop so biosecurity logic holds the generic all-clear.
+        PestOutbreakAlertBanner(selectedCounty = selectedCounty, plantedCrop = if (isCropIntentInvalid) "" else farmerPlantedCrop)
 
         // Bottom-bar dialogs (mobile sheets replacing the old header buttons).
         if (navExpanded) {
@@ -2037,11 +2319,17 @@ fun DashboardScreen(
                     contentPrimary = contentPrimary,
                     isDarkTheme = isDarkTheme,
                     onBack = { activeViewport = "home" },
-                    onSelectCounty = { selectedCounty = it },
+                    onSelectCounty = {
+                        // Same corridor-switch invalidation for the market hub.
+                        liveBrief = null
+                        briefSource = ""
+                        liveLoading = false
+                        selectedCounty = it
+                    },
                     cropFilter = marketCropFilter,
                     onCropFilterChange = { marketCropFilter = it },
                     myCrops = cropHistory,
-                    plantedCrop = farmerPlantedCrop,
+                    plantedCrop = if (isCropIntentInvalid) "" else farmerPlantedCrop,
                     onAddCrop = { crop ->
                         farmerPlantedCrop = crop
                         marketCropFilter = crop
@@ -2105,7 +2393,6 @@ fun DashboardScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text(str("home_county_search"), color = Color.Gray) },
-                leadingIcon = { Text("🔍", fontSize = 16.sp) },
                 trailingIcon = {
                     if (countySearchQuery.isNotEmpty()) {
                         TextButton(onClick = { countySearchQuery = "" }) {
@@ -2133,7 +2420,7 @@ fun DashboardScreen(
                     .height(56.dp)
                     .shadow(3.dp, RoundedCornerShape(14.dp))
                     .background(Color.White, RoundedCornerShape(14.dp))
-                    .border(2.dp, Color(0xFFE6B325), RoundedCornerShape(14.dp)) // Signature Harvest Gold border
+                    .border(2.dp, Color(0xFFE6B325), RoundedCornerShape(14.dp)) // Brand Harvest Gold border
                     .clickable { expanded = !expanded }
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterStart
@@ -2174,6 +2461,12 @@ fun DashboardScreen(
                             DropdownMenuItem(
                                 text = { Text(county, color = Color.Black, fontWeight = FontWeight.Medium) },
                                 onClick = {
+                                    // Explicit cache invalidation: flush stale brief
+                                    // state the instant they switch corridors so old
+                                    // regional matrices never leak onto their view.
+                                    liveBrief = null
+                                    briefSource = ""
+                                    liveLoading = false
                                     selectedCounty = county
                                     expanded = false
                                     countySearchQuery = ""
@@ -2203,6 +2496,7 @@ fun DashboardScreen(
                 placeholder = { Text(str("home_crop_hint"), color = Color.Gray) },
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
+                isError = isCropIntentInvalid,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Color.White,
                     unfocusedContainerColor = Color.White,
@@ -2212,6 +2506,25 @@ fun DashboardScreen(
                     unfocusedBorderColor = Color(0xFFE6B325)
                 )
             )
+
+            if (isCropIntentInvalid) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFDECEA), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFFB71C1C), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = CROP_INVALID_INTENT_MESSAGE,
+                        color = Color(0xFF7F1D1D),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -2282,9 +2595,29 @@ fun DashboardScreen(
                 )
             }
 
-            if (farmerPlantedCrop.isNotBlank()) {
+            if (farmerPlantedCrop.isNotBlank() && !isCropIntentInvalid) {
                 Spacer(modifier = Modifier.height(16.dp))
-                if (blueprintCrop != null) {
+                if (isLocationMissing) {
+                    // Empty-state: no county + GPS off, so no stubs or cached
+                    // regional matrices — they pick a county or enable GPS.
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(4.dp, RoundedCornerShape(16.dp)),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                text = LOCATION_MISSING_MESSAGE,
+                                color = Color(0xFF1B4332),
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                } else if (blueprintCrop != null) {
                     // --- 2C. LOGIC-BASED AGRONOMIC & MANAGEMENT ENGINE ---
                     Card(
                         modifier = Modifier
@@ -2329,7 +2662,7 @@ fun DashboardScreen(
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "${blueprintCrop.cropName} • ${selectedCounty.ifBlank { "Baringo" }} • Local KES ${blueprintCrop.localPriceKes} ➔ Hub KES ${blueprintCrop.hubPriceKes}",
+                                text = "${blueprintCrop.cropName} • ${selectedCounty} • Local KES ${blueprintCrop.localPriceKes} ➔ Hub KES ${blueprintCrop.hubPriceKes}",
                                 color = Color(0xFFA75D5D),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
@@ -2356,6 +2689,13 @@ fun DashboardScreen(
                             Text(advisoryField(blueprintCrop.advisory, "moist"), color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(advisoryField(blueprintCrop.advisory, "harvest"), color = Color.DarkGray, fontSize = 13.sp, lineHeight = 18.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            KenyanTtsMediaHub(
+                                textToSpeech = textToSpeech,
+                                textToRead = advisoryField(blueprintCrop.advisory, "space") + ". " +
+                                    advisoryField(blueprintCrop.advisory, "land") + ". " +
+                                    advisoryField(blueprintCrop.advisory, "harvest")
+                            )
                             Spacer(modifier = Modifier.height(12.dp))
                             // --- 2D. LIVE METEOROLOGICAL ALERT STRIP ---
                             Text(
@@ -2381,6 +2721,11 @@ fun DashboardScreen(
                             ) {
                                 Text(liveAdvisoryText, color = Color(0xFF2C2C2E), fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            KenyanTtsMediaHub(
+                                textToSpeech = textToSpeech,
+                                textToRead = liveAdvisoryText
+                            )
                         }
                     }
                 } else {
@@ -2427,7 +2772,7 @@ fun DashboardScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            if (liveLoading && liveBrief == null) {
+                            if (liveLoading && displayBrief == null) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(20.dp),
@@ -2443,12 +2788,17 @@ fun DashboardScreen(
                                 }
                             } else {
                                 Text(
-                                    liveBrief ?: strf("live_none", farmerPlantedCrop),
+                                    displayBrief ?: strf("live_none", farmerPlantedCrop),
                                     color = Color.DarkGray,
                                     fontSize = 13.sp,
                                     lineHeight = 19.sp
                                 )
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            KenyanTtsMediaHub(
+                                textToSpeech = textToSpeech,
+                                textToRead = displayBrief ?: ""
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 str("live_saved"),
@@ -2471,16 +2821,12 @@ fun DashboardScreen(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)) // Premium Dark Slate background
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Default.ShowChart, contentDescription = null, tint = Color(0xFFE6B325))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = str("arb_title"),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFE6B325)
-                        )
-                    }
+                    Text(
+                        text = str("arb_title"),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE6B325)
+                    )
 
                     Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 12.dp))
 
@@ -2568,7 +2914,7 @@ fun DashboardScreen(
             // --- 3-ii. SACCO INPUT PLANNER WIDGET (price grid + acreage calculator) ---
             SaccoInputPlannerWidget(
                 modifier = Modifier.fillMaxWidth(),
-                plantedCrop = farmerPlantedCrop
+                plantedCrop = if (isCropIntentInvalid) "" else farmerPlantedCrop
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -2582,48 +2928,6 @@ fun DashboardScreen(
             FaqSectionComponent(textToSpeech = textToSpeech, modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(28.dp))
-
-            // --- 3A-iii. FRIENDLY SHAMBA AI CHAT ENTRY (typing, crops + cattle) ---
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(4.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF2E7D32))
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Chat,
-                            contentDescription = null,
-                            tint = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = str("shamba_title"),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = str("shamba_desc"),
-                        color = Color(0xFFE8F5E9),
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { showShambaChat = true },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                    ) {
-                        Text(str("shamba_start"), color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
-                }
-            }
 
             if (showShambaChat) {
                 Dialog(onDismissRequest = { showShambaChat = false }) {
@@ -2655,20 +2959,12 @@ fun DashboardScreen(
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Savings,
-                            contentDescription = null,
-                            tint = Color(0xFF2E7D32)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = str("sac3_title"),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2C2C2E)
-                        )
-                    }
+                    Text(
+                        text = str("sac3_title"),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2C2C2E)
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = if (selectedCounty.isEmpty()) str("sac3_sub_empty")
@@ -2729,11 +3025,6 @@ fun DashboardScreen(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA75D5D)) // Brand Terracotta accent
             ) {
-            Icon(
-                imageVector = Icons.Default.TrendingUp,
-                contentDescription = null,
-                modifier = Modifier.padding(end = 8.dp)
-            )
             Text(
                 text = str("cta_launch"),
                 fontSize = 15.sp,

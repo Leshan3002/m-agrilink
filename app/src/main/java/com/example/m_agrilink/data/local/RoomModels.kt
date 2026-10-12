@@ -87,3 +87,38 @@ data class SubsidyBaseline(
     val priceKes: Int,
     val updatedAt: Long = System.currentTimeMillis()
 )
+
+/**
+ * 5. LAYER 5 — IMAGE DIAGNOSTIC HISTORY CACHE (offline-first).
+ * One row per vision run: crop + county + model verdict + source.
+ * Only metadata/text is stored (never raw bitmap bytes) so the table
+ * stays small and survives signal drops. Ordered by timestamp DESC.
+ */
+@Entity(
+    tableName = "scan_diagnostic",
+    indices = [Index(value = ["timestamp"]), Index(value = ["cropName", "timestamp"])]
+)
+data class ScanDiagnostic(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val cropName: String,
+    val county: String,
+    val verdict: String,
+    val source: String, // GEMINI_VISION, OFFLINE, CACHE
+    val imageUri: String? = null,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+/**
+ * 6. COUNTY BRIEF CACHE (location-scoped durability anchor).
+ * One row per county: the latest verified brief for their active crop in
+ * that county. Keyed by county (not a static value) so switching counties
+ * instantly drops the previous region's arrays and emits fresh context.
+ */
+@Entity(tableName = "crop_brief_table")
+data class CropBriefEntity(
+    @PrimaryKey val countyName: String,
+    val cropName: String,
+    val briefText: String,
+    val source: String, // GEMINI, OPENFARM, WIKI, CACHE, OFFLINE
+    val updatedAt: Long = System.currentTimeMillis()
+)
