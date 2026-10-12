@@ -1,6 +1,12 @@
 package com.example.m_agrilink.network
 
 import com.example.m_agrilink.ui.TelemetryContext
+import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -11,6 +17,18 @@ import okhttp3.OkHttpClient
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
+
+/**
+ * Terminal-aware token stream events. The producer closes the channel
+ * right after any terminal event, so collectors simply handle each event
+ * and finish when the flow completes.
+ */
+sealed interface ChatStreamEvent {
+    data class TextDelta(val text: String) : ChatStreamEvent
+    data object AuthRejected : ChatStreamEvent
+    data object TransportError : ChatStreamEvent
+    data object Done : ChatStreamEvent
+}
 
 /**
  * Production-ready Repository layout for managing Google Gemini communication.
@@ -45,6 +63,26 @@ class GeminiRepository(private val apiKey: String) {
         "v1beta/models/gemini-3.1-flash-lite:generateContent",
         "v1beta/models/gemini-3.5-flash-lite:generateContent"
     )
+
+    // Streaming twin of the unary chain (same models, SSE endpoint).
+    private val streamChain = modelChain.map { it.replace(":generateContent", ":streamGenerateContent") }
+
+    // Generous read window: SSE streams stay open across many token flushes.
+    private val streamApi by lazy {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .build()
+        Retrofit.Builder()
+            .baseUrl("https://generativelanguage.googleapis.com/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GeminiClientRoute::class.java)
+    }
+
+    private val streamGson = Gson()
 
     // HTTP codes worth one more attempt (free-tier capacity flaps).
     private val transientCodes = setOf(408, 429, 500, 502, 503, 504)
@@ -128,6 +166,94 @@ class GeminiRepository(private val apiKey: String) {
         }
         return null to false
     }
+
+    /**
+     * Real-time token stream for chat bubbles. Emits [ChatStreamEvent.TextDelta]
+     * per SSE `data:` line so the UI can paint each chunk the moment it
+     * arrives, then a single terminal event ([Done], [AuthRejected], or
+     * [TransportError]) after which the channel is closed.
+     *
+     * The blocking network read runs on Dispatchers.IO via [flowOn]; chunk
+     * emissions are delivered on the collector's context. Cancelling the
+     * collector cancels the in-flight HTTP call, so no background read
+     * outlives the chat that started it.
+     */
+    fun streamAdvice(request: GeminiRequest): Flow<ChatStreamEvent> = callbackFlow {
+        var activeCall: Call<*>? = null
+        try {
+            var streamed = false
+            for (model in streamChain) {
+                val call = streamApi.streamGenerateContent(model, apiKey, request = request)
+                activeCall = call
+                val response = try {
+                    call.execute()
+                } catch (e: UnknownHostException) {
+                    trySend(ChatStreamEvent.TransportError)
+                    close()
+                    return@callbackFlow
+                } catch (e: SocketTimeoutException) {
+                    continue // transient: try the next model in the chain
+                } catch (e: Exception) {
+                    if (e is InterruptedException) throw e
+                    trySend(ChatStreamEvent.TransportError)
+                    close()
+                    return@callbackFlow
+                } finally {
+                    if (activeCall === call) activeCall = null
+                }
+                if (response.code() == 400 || response.code() == 401 || response.code() == 403) {
+                    trySend(ChatStreamEvent.AuthRejected)
+                    close()
+                    return@callbackFlow
+                }
+                if (!response.isSuccessful) continue // next model in the chain
+                val body = response.body()
+                if (body == null) continue
+                streamed = true
+                try {
+                    body.source().buffer().use { buffer ->
+                        while (true) {
+                            val line = try {
+                                buffer.readUtf8Line() ?: break
+                            } catch (e: Exception) {
+                                if (e is InterruptedException) throw e
+                                break
+                            }
+                            val trimmed = line.trim()
+                            if (!trimmed.startsWith("data:")) continue
+                            val payload = trimmed.removePrefix("data:").trim()
+                            if (payload.isEmpty() || payload == "[DONE]") continue
+                            val delta = try {
+                                streamGson.fromJson(payload, GeminiResponse::class.java)
+                                    ?.candidates?.firstOrNull()
+                                    ?.content?.parts?.firstOrNull()?.text
+                                    ?.takeIf { it.isNotEmpty() }
+                            } catch (e: Exception) {
+                                null // malformed keep-alive line: skip, keep streaming
+                            }
+                            if (delta != null) trySend(ChatStreamEvent.TextDelta(delta))
+                        }
+                    }
+                } finally {
+                    try {
+                        body.close()
+                    } catch (e: Exception) {
+                    }
+                }
+                trySend(ChatStreamEvent.Done)
+                close()
+                return@callbackFlow
+            }
+            if (!streamed) {
+                trySend(ChatStreamEvent.TransportError)
+                close()
+            }
+        } catch (e: Exception) {
+            if (e !is InterruptedException) trySend(ChatStreamEvent.TransportError)
+            close(e.takeIf { it is InterruptedException })
+        }
+        awaitClose { activeCall?.cancel() }
+    }.flowOn(Dispatchers.IO)
 
     /**
      * Executes non-blocking asynchronous call with integrated telemetry context.

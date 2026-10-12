@@ -7,14 +7,15 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.m_agrilink.data.MarketDataRepository
+import com.example.m_agrilink.network.ChatStreamEvent
+import com.example.m_agrilink.network.GeminiHelper
 import com.example.m_agrilink.network.GeminiRepository
 import com.example.m_agrilink.network.SecureKeyVault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.net.UnknownHostException
 
-enum class EngineStatus { UNKNOWN, ONLINE, OFFLINE }
+enum class EngineStatus { UNKNOWN, STREAMING, ONLINE, OFFLINE }
 
 class AiAssistantViewModel : ViewModel() {
 
@@ -119,42 +120,65 @@ class AiAssistantViewModel : ViewModel() {
         val loadingPlaceholder = ChatMessage("🔍 Analyzing your question…", isUser = false)
         messages.add(loadingPlaceholder)
 
-        // Network runs off the main thread; bubbles update back on Main.
+        // Token-streaming consumer: the repository reads SSE deltas on
+        // Dispatchers.IO while this collector stays on Main, so each chunk
+        // paints into the live bubble the moment it arrives with no frame
+        // drops. The badge flips to STREAMING on the first token.
         viewModelScope.launch {
+            val currentActiveResponseText = StringBuilder()
+            var streamIndex = -1
+            var terminal: ChatStreamEvent? = null
             try {
-                val (liveText, authRejected) = withContext(Dispatchers.IO) {
-                    repository.getClimateSmartAdviceSync(inquiry, telemetry)
-                }
-                messages.remove(loadingPlaceholder)
-                when {
-                    !liveText.isNullOrBlank() -> {
-                        consecutiveFailures = 0
-                        engineStatus = EngineStatus.ONLINE
-                        messages.add(ChatMessage(liveText + learnMoreBlock(inquiry), isUser = false))
+                repository.streamAdvice(GeminiHelper.buildGeminiContextRequest(inquiry, telemetry))
+                    .collect { event ->
+                        when (event) {
+                            is ChatStreamEvent.TextDelta -> {
+                                currentActiveResponseText.append(event.text)
+                                val snapshot = currentActiveResponseText.toString()
+                                if (streamIndex < 0) {
+                                    engineStatus = EngineStatus.STREAMING
+                                    messages.remove(loadingPlaceholder)
+                                    messages.add(ChatMessage(snapshot, isUser = false))
+                                    streamIndex = messages.lastIndex
+                                } else {
+                                    messages[streamIndex] =
+                                        messages[streamIndex].copy(text = snapshot)
+                                }
+                            }
+                            else -> terminal = event
+                        }
                     }
-                    authRejected -> messages.add(
-                        ChatMessage(
-                            "🔑 Google rejected my API key (invalid or expired). The app owner " +
-                                "needs to paste a fresh free key from Google AI Studio into " +
-                                "local.properties as GEMINI_API_KEY and rebuild — real keys start " +
-                                "with \"AIza\" and are 39 characters. Your farm questions are safe " +
-                                "with me meanwhile! 🌱",
-                            isUser = false
-                        )
-                    )
-                    else -> {
-                        registerFailureSilent()
-                        messages.add(ChatMessage(offlineExpertBrief(telemetry) + learnMoreBlock(inquiry), isUser = false))
-                    }
-                }
-            } catch (e: UnknownHostException) {
-                messages.remove(loadingPlaceholder)
-                registerFailureSilent()
-                messages.add(ChatMessage(offlineExpertBrief(telemetry) + learnMoreBlock(inquiry), isUser = false))
             } catch (e: Exception) {
-                messages.remove(loadingPlaceholder)
-                registerFailureSilent()
-                messages.add(ChatMessage(offlineExpertBrief(telemetry) + learnMoreBlock(inquiry), isUser = false))
+                terminal = ChatStreamEvent.TransportError
+            }
+            val streamed = currentActiveResponseText.toString()
+            messages.remove(loadingPlaceholder)
+            when {
+                terminal is ChatStreamEvent.AuthRejected -> messages.add(
+                    ChatMessage(
+                        "🔑 Google rejected my API key (invalid or expired). The app owner " +
+                            "needs to paste a fresh free key from Google AI Studio into " +
+                            "local.properties as GEMINI_API_KEY and rebuild — real keys start " +
+                            "with \"AIza\" and are 39 characters. Your farm questions are safe " +
+                            "with me meanwhile! 🌱",
+                        isUser = false
+                    )
+                )
+                streamed.isNotBlank() -> {
+                    consecutiveFailures = 0
+                    engineStatus = EngineStatus.ONLINE
+                    if (streamIndex >= 0) {
+                        messages[streamIndex] =
+                            messages[streamIndex].copy(text = streamed + learnMoreBlock(inquiry))
+                    } else {
+                        messages.add(ChatMessage(streamed + learnMoreBlock(inquiry), isUser = false))
+                    }
+                }
+                else -> {
+                    if (streamIndex >= 0) messages.removeAt(streamIndex)
+                    registerFailureSilent()
+                    messages.add(ChatMessage(offlineExpertBrief(telemetry) + learnMoreBlock(inquiry), isUser = false))
+                }
             }
         }
     }

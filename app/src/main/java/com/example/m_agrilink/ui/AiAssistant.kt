@@ -356,6 +356,7 @@ fun AiChatOverlay(
             ) {
                 val (dot, label) = when (viewModel.engineStatus) {
                     EngineStatus.ONLINE -> Color(0xFF2E7D32) to "Live Sync"
+                    EngineStatus.STREAMING -> Color(0xFF2E7D32) to "Engine Active — Streaming Response…"
                     EngineStatus.OFFLINE -> Color(0xFFE6B325) to "Offline Shield Active"
                     else -> Color.Gray to "Connecting…"
                 }

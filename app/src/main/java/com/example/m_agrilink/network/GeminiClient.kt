@@ -1,10 +1,12 @@
 package com.example.m_agrilink.network
 
 import com.example.m_agrilink.ui.TelemetryContext
+import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.Query
+import retrofit2.http.Streaming
 import retrofit2.http.Url
 
 /**
@@ -18,6 +20,19 @@ interface GeminiClientRoute {
         @Query("key") apiKey: String,
         @Body request: GeminiRequest
     ): Call<GeminiResponse>
+
+    /**
+     * Server-sent-events token stream. The caller reads `data:` JSON lines
+     * off the response body as they arrive; each line carries one text delta.
+     */
+    @Streaming
+    @POST
+    fun streamGenerateContent(
+        @Url modelPath: String,
+        @Query("key") apiKey: String,
+        @Query("alt") alt: String = "sse",
+        @Body request: GeminiRequest
+    ): Call<ResponseBody>
 }
 
 data class GeminiRequest(
