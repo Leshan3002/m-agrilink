@@ -33,7 +33,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -180,7 +179,7 @@ private fun ChatAudioHub(
             },
             enabled = textToSpeech != null && readable.isNotBlank() && !isPlaying
         ) {
-            Text("▶️ Play Audio", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE6B325))
+            Text("▶️ Play Audio", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
         }
         TextButton(
             onClick = {
@@ -193,7 +192,7 @@ private fun ChatAudioHub(
             },
             enabled = isPlaying
         ) {
-            Text("⏸️ Pause", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF5F5F5))
+            Text("⏸️ Pause", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF424242))
         }
         TextButton(
             onClick = {
@@ -207,7 +206,7 @@ private fun ChatAudioHub(
             },
             enabled = isPlaying || isPaused
         ) {
-            Text("⏹️ Stop", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF5F5F5))
+            Text("⏹️ Stop", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF424242))
         }
     }
 }
@@ -335,18 +334,39 @@ fun AiChatOverlay(
         }
 
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header
+            // Header: identity band — avatar mark, title + role caption, Close.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "M-AgriLink AI Assistant",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2E7D32),
-                    fontSize = 18.sp
-                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color(0xFF1B5E20), CircleShape)
+                ) {
+                    Text(
+                        text = "S",
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "M-AgriLink AI Assistant",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2E7D32),
+                        fontSize = 18.sp
+                    )
+                    Text(
+                        "FARM ASSISTANT",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        fontSize = 11.sp
+                    )
+                }
                 TextButton(onClick = onDismiss) { Text("Close") }
             }
 
@@ -516,13 +536,19 @@ fun AiChatOverlay(
                         tint = Color(0xFF2E7D32)
                     )
                 }
-                IconButton(
-                    onClick = { submitInquiry(inputText) }
+                Button(
+                    onClick = { submitInquiry(inputText) },
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE6B325),
+                        contentColor = Color(0xFF1B4332)
+                    ),
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = Color(0xFF2E7D32)
+                        contentDescription = "Send"
                     )
                 }
             }
@@ -595,7 +621,7 @@ private fun LinkPreviewCard(
         onClick = { openChatLink(context, url) },
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
         border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
@@ -654,32 +680,41 @@ fun ChatBubble(
             .padding(horizontal = 16.dp, vertical = 6.dp),
         contentAlignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        // Glassmorphism field bubbles: gold-tinted glass for the farmer,
-        // deep field-green gradient with gold highlights for Shamba replies.
-        val bubbleBrush = if (message.isUser) {
-            Brush.linearGradient(
-                colors = listOf(Color(0xFFFFF8E1), Color(0xFFFFECB3))
-            )
-        } else {
-            Brush.verticalGradient(
-                colors = listOf(Color(0xFF064E3B), Color(0xFF1B4332))
-            )
-        }
-        val bubbleBorder = if (message.isUser) {
-            Color(0xFFE6B325).copy(alpha = 0.6f)
-        } else {
-            Color.White.copy(alpha = 0.25f)
-        }
-        val bubbleText = if (message.isUser) Color(0xFF2C2C2E) else Color(0xFFF5F5F5)
-        val linkTint = if (message.isUser) Color(0xFF1E3A8A) else Color(0xFFE6B325)
-        Box(
-            modifier = Modifier
-                .then(if (message.isUser) Modifier else Modifier.fillMaxWidth())
-                .shadow(4.dp, RoundedCornerShape(16.dp))
-                .background(bubbleBrush, RoundedCornerShape(16.dp))
-                .border(1.dp, bubbleBorder, RoundedCornerShape(16.dp))
-                .padding(12.dp)
+        // Floating-widget bubble language: dark user pill on the right,
+        // white assistant card with an avatar mark on the left.
+        val bubbleColor = if (message.isUser) Color(0xFF1C1C1E) else Color.White
+        val bubbleBorder = if (message.isUser) Color(0xFF1C1C1E) else Color(0xFFE0E0E0)
+        val bubbleText = if (message.isUser) Color.White else Color(0xFF212121)
+        val linkTint = if (message.isUser) Color(0xFFBBDEFB) else Color(0xFF1B5E20)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.Top
         ) {
+            if (!message.isUser) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(Color(0xFF1B5E20), CircleShape)
+                ) {
+                    Text(
+                        text = "S",
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.sp
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Box(
+                modifier = Modifier
+                    .then(if (message.isUser) Modifier else Modifier.weight(1f))
+                    .shadow(4.dp, RoundedCornerShape(16.dp))
+                    .background(bubbleColor, RoundedCornerShape(16.dp))
+                    .border(1.dp, bubbleBorder, RoundedCornerShape(16.dp))
+                    .padding(12.dp)
+            ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val links = remember(message.text) { extractChatLinks(message.text) }
@@ -735,7 +770,7 @@ fun ChatBubble(
                             Icon(
                                 imageVector = if (AppAudioGate.muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
                                 contentDescription = if (AppAudioGate.muted) "Unmute all audio" else "Mute all audio",
-                                tint = Color(0xFFE6B325),
+                                tint = Color(0xFF1B5E20),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -759,6 +794,7 @@ fun ChatBubble(
                     }
                 }
             }
+        }
         }
     }
 }
