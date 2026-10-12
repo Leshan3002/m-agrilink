@@ -11,8 +11,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.ClickableText
@@ -385,8 +386,17 @@ fun AiChatOverlay(
                 }
             }
 
-            // Chat Messages
+            // Chat Messages: state-tracked column with auto-scroll injection —
+            // every new question or streamed token chunk pins the viewport to
+            // the latest bubble so the conversation stays in view hands-free.
+            val listState = rememberLazyListState()
+            LaunchedEffect(messages.size) {
+                if (messages.isNotEmpty()) {
+                    listState.animateScrollToItem(messages.size - 1)
+                }
+            }
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
@@ -395,7 +405,10 @@ fun AiChatOverlay(
             ) {
                 items(
                     messages,
-                    key = { it.timestamp.toString() + it.text.hashCode() }
+                    // Stable per-message key (timestamp + side): the streaming
+                    // bubble updates its text in place instead of remounting
+                    // on every token chunk, keeping scroll position smooth.
+                    key = { it.timestamp.toString() + it.isUser }
                 ) { message ->
                     var bubbleVisible by remember { mutableStateOf(false) }
                     LaunchedEffect(Unit) { bubbleVisible = true }
@@ -634,7 +647,7 @@ fun ChatBubble(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         contentAlignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
         // Glassmorphism field bubbles: gold-tinted glass for the farmer,
