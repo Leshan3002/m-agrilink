@@ -634,7 +634,7 @@ fun ChatBubble(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         contentAlignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
         // Glassmorphism field bubbles: gold-tinted glass for the farmer,
@@ -657,6 +657,7 @@ fun ChatBubble(
         val linkTint = if (message.isUser) Color(0xFF1E3A8A) else Color(0xFFE6B325)
         Box(
             modifier = Modifier
+                .then(if (message.isUser) Modifier else Modifier.fillMaxWidth())
                 .shadow(4.dp, RoundedCornerShape(16.dp))
                 .background(bubbleBrush, RoundedCornerShape(16.dp))
                 .border(1.dp, bubbleBorder, RoundedCornerShape(16.dp))
@@ -666,7 +667,7 @@ fun ChatBubble(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val links = remember(message.text) { extractChatLinks(message.text) }
                     if (message.isUser || links.isEmpty()) {
-                        SelectionContainer(modifier = Modifier.weight(1f)) {
+                        SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             Text(
                                 text = message.text,
                                 fontSize = 14.sp,
@@ -705,7 +706,7 @@ fun ChatBubble(
                         ClickableText(
                             text = linkedText,
                             style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = bubbleText),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
                             onClick = { offset ->
                                 linkedText.getStringAnnotations("URL", offset, offset)
                                     .firstOrNull()?.let { openChatLink(linkOpener, it.item) }
