@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit
 sealed interface ChatStreamEvent {
     data class TextDelta(val text: String) : ChatStreamEvent
     data object AuthRejected : ChatStreamEvent
+    data object QuotaExhausted : ChatStreamEvent
     data object TransportError : ChatStreamEvent
     data object Done : ChatStreamEvent
 }
@@ -170,8 +171,8 @@ class GeminiRepository(private val apiKey: String) {
     /**
      * Real-time token stream for chat bubbles. Emits [ChatStreamEvent.TextDelta]
      * per SSE `data:` line so the UI can paint each chunk the moment it
-     * arrives, then a single terminal event ([Done], [AuthRejected], or
-     * [TransportError]) after which the channel is closed.
+     * arrives, then a single terminal event ([Done], [AuthRejected],
+     * [QuotaExhausted], or [TransportError]) after which the channel is closed.
      *
      * The blocking network read runs on Dispatchers.IO via [flowOn]; chunk
      * emissions are delivered on the collector's context. Cancelling the
@@ -182,6 +183,7 @@ class GeminiRepository(private val apiKey: String) {
         var activeCall: Call<*>? = null
         try {
             var streamed = false
+            var sawRateLimit = false
             for (model in streamChain) {
                 val call = streamApi.streamGenerateContent(model, apiKey, request = request)
                 activeCall = call
@@ -206,7 +208,13 @@ class GeminiRepository(private val apiKey: String) {
                     close()
                     return@callbackFlow
                 }
-                if (!response.isSuccessful) continue // next model in the chain
+                if (!response.isSuccessful) {
+                    // 429 is matched on the real status code (not message
+                    // sniffing): fail over to the next model, and remember it
+                    // so an exhausted chain reports quota, not a dead network.
+                    if (response.code() == 429) sawRateLimit = true
+                    continue // next model in the chain
+                }
                 val body = response.body()
                 if (body == null) continue
                 streamed = true
@@ -245,7 +253,10 @@ class GeminiRepository(private val apiKey: String) {
                 return@callbackFlow
             }
             if (!streamed) {
-                trySend(ChatStreamEvent.TransportError)
+                trySend(
+                    if (sawRateLimit) ChatStreamEvent.QuotaExhausted
+                    else ChatStreamEvent.TransportError
+                )
                 close()
             }
         } catch (e: Exception) {

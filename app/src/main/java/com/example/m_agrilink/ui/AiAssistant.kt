@@ -378,6 +378,7 @@ fun AiChatOverlay(
                 val (dot, label) = when (viewModel.engineStatus) {
                     EngineStatus.ONLINE -> Color(0xFF2E7D32) to "Live Sync"
                     EngineStatus.STREAMING -> Color(0xFF2E7D32) to "Engine Active — Streaming Response…"
+                    EngineStatus.QUOTA -> Color(0xFFE6B325) to "Quota Paused — Restoring Soon"
                     EngineStatus.OFFLINE -> Color(0xFFE6B325) to "Offline Shield Active"
                     else -> Color.Gray to "Connecting…"
                 }
@@ -506,6 +507,26 @@ fun AiChatOverlay(
                     color = Color(0xFFB71C1C),
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
+            }
+            // Quota notice: high-contrast card pinned above the input bar.
+            // The field stays fully interactive; nothing is gated or dropped.
+            if (viewModel.engineStatus == EngineStatus.QUOTA) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
+                    border = BorderStroke(1.dp, Color(0xFFE6B325))
+                ) {
+                    Text(
+                        text = "⚠️ API Quota Limit Reached: M-AgriLink has temporarily reached its free-tier token cap. Your question stays visible in this conversation. Live sync will restore automatically shortly.",
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1B4332),
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
             Row(
                 modifier = Modifier

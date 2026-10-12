@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class EngineStatus { UNKNOWN, STREAMING, ONLINE, OFFLINE }
+enum class EngineStatus { UNKNOWN, STREAMING, ONLINE, OFFLINE, QUOTA }
 
 class AiAssistantViewModel : ViewModel() {
 
@@ -168,7 +168,13 @@ class AiAssistantViewModel : ViewModel() {
                 }
                 else -> {
                     if (streamIndex >= 0) messages.removeAt(streamIndex)
-                    registerFailureSilent()
+                    if (terminal is ChatStreamEvent.QuotaExhausted) {
+                        // Quota is not a connectivity failure: hold the distinct
+                        // QUOTA badge (no damping) and still answer offline.
+                        engineStatus = EngineStatus.QUOTA
+                    } else {
+                        registerFailureSilent()
+                    }
                     messages.add(ChatMessage(offlineExpertBrief(telemetry) + satisfactionCheckSuffix(), isUser = false))
                 }
             }
