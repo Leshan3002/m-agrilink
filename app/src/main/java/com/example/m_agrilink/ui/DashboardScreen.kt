@@ -1560,7 +1560,7 @@ private fun ActiveAccountHud(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val safeName = displayName.ifBlank { "Levis Lekesio" }
-    val userEmailState = displayEmail
+    val activeUserEmailSessionString = displayEmail
     Column(horizontalAlignment = Alignment.End) {
         Surface(
             shape = CircleShape,
@@ -1633,13 +1633,13 @@ private fun ActiveAccountHud(
                         color = Color.Black
                     )
                     Text(
-                        text = userEmailState.ifBlank { "levislekesio@gmail.com" },
+                        text = activeUserEmailSessionString.ifBlank { "No email registered" },
                         fontSize = 12.sp,
                         color = Color.DarkGray
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "They stay signed in on their device and their harvest data never leaves this phone.",
+                        text = "You stay signed in securely on your device. Your harvest data remains entirely private on this phone.",
                         fontSize = 11.sp,
                         lineHeight = 15.sp,
                         color = Color.Gray
@@ -1679,7 +1679,7 @@ private fun ActiveAccountHud(
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Tapping Log Out clears their session so they sign in again next time.",
+                        text = "Tapping Log Out completely clears your active session metrics from this device.",
                         fontSize = 10.sp,
                         lineHeight = 14.sp,
                         color = Color.Gray
@@ -1694,7 +1694,7 @@ private fun ActiveAccountHud(
 @Composable
 fun DashboardScreen(
     displayName: String = "Levis Lekesio",
-    displayEmail: String = "levislekesio@gmail.com",
+    displayEmail: String = "",
     onLogout: () -> Unit = {},
     onOpenScanner: () -> Unit = {},
     onOpenChat: () -> Unit = {},
