@@ -9,11 +9,6 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -29,16 +24,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.WbCloudy
-import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,9 +40,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -473,25 +461,6 @@ fun WeatherTerminalScreen(
         }
     }
 
-    val pulse by rememberInfiniteTransition(label = "wxPulse").animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "wxPulseAlpha"
-    )
-    val sunScale by rememberInfiniteTransition(label = "wxSun").animateFloat(
-        initialValue = 1f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "wxSunScale"
-    )
-
     // No fake numbers: when live is null we show — instead of 24.5°C/65%.
     val forecast = liveForecast ?: emptyList()
     val hasLive = liveForecast != null && liveTemp != null
@@ -570,20 +539,6 @@ fun WeatherTerminalScreen(
                 }
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.WbSunny,
-                        contentDescription = "Sun",
-                        tint = Color(0xFFFFD54F),
-                        modifier = Modifier.size(56.dp).scale(sunScale)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Filled.Cloud,
-                        contentDescription = "Cloud",
-                        tint = Color.White.copy(alpha = pulse),
-                        modifier = Modifier.size(44.dp).alpha(pulse)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
                             if (liveTemp != null) String.format(Locale.US, "%.1f°C", liveTemp) else "— offline —",
@@ -653,11 +608,7 @@ fun WeatherTerminalScreen(
             colors = CardDefaults.cardColors(containerColor = Color.White)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Filled.WbSunny, contentDescription = null, tint = Color(0xFFE6B325))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("☀️ Daylight Timeline", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.Black)
-                }
+                Text("Daylight Timeline", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.Black)
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -668,12 +619,6 @@ fun WeatherTerminalScreen(
                         Text("🌅 Sunrise", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                         Text(wxSunrise ?: "— live only —", fontSize = 14.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                     }
-                    Icon(
-                        imageVector = Icons.Filled.WbSunny,
-                        contentDescription = "Sun path",
-                        tint = Color(0xFFE6B325),
-                        modifier = Modifier.size(40.dp).scale(sunScale)
-                    )
                     Column(horizontalAlignment = Alignment.End) {
                         Text("🌇 Sunset", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                         Text(wxSunset ?: "— live only —", fontSize = 14.sp, color = Color.Black, fontWeight = FontWeight.Bold)
@@ -733,21 +678,6 @@ fun WeatherTerminalScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(day.weekday, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Icon(
-                            imageVector = when (day.iconKind) {
-                                "rain" -> Icons.Filled.WbCloudy
-                                "cloud" -> Icons.Filled.Cloud
-                                else -> Icons.Filled.WbSunny
-                            },
-                            contentDescription = day.weekday,
-                            tint = when (day.iconKind) {
-                                "rain" -> Color(0xFF1E3A8A)
-                                "cloud" -> Color(0xFF64748B)
-                                else -> Color(0xFFE6B325)
-                            },
-                            modifier = Modifier.size(32.dp)
-                        )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             if (day.iconKind == "rain") "🌧 Rain Cloud" else if (day.iconKind == "cloud") "☁️ Cloudy" else "☀️ Bright Sun",

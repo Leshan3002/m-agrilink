@@ -8,8 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -133,11 +131,12 @@ private fun NetworkGalleryImage(
                 contentScale = ContentScale.Crop
             )
         } else {
-            Icon(
-                imageVector = Icons.Filled.Image,
-                contentDescription = if (failed) "Apiary photo unavailable offline" else "Loading apiary photo",
-                tint = Color.Gray,
-                modifier = Modifier.size(36.dp)
+            Text(
+                text = if (failed) "Apiary photo unavailable offline" else "Loading apiary photo…",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Gray,
+                modifier = Modifier.padding(8.dp)
             )
         }
     }

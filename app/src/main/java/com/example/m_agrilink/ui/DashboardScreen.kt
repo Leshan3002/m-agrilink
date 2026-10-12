@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
@@ -1454,7 +1453,7 @@ private fun AskShambaFab(
 /**
  * Shamba Scan cockpit entry: full-width glass card with a 3000ms breathing
  * glow cycling Sprout Light Green (#52B788) <-> Organic Forest Green
- * (#1B4332) across the border stroke and icon accents. The whole card is
+ * (#1B4332) across the border stroke. The whole card is
  * clickable and routes to the scanner destination.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1473,15 +1472,6 @@ private fun ShambaScanEntryCard(
         label = "entryGlowFraction"
     )
     val glowColor = lerp(Color(0xFF52B788), Color(0xFF1B4332), glowFraction)
-    val pulseScale by breath.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3000),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "entryPulseScale"
-    )
 
     Card(
         onClick = onOpenScanner,
@@ -1499,26 +1489,9 @@ private fun ShambaScanEntryCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(52.dp)
-                    .graphicsLayer {
-                        scaleX = pulseScale
-                        scaleY = pulseScale
-                    }
-                    .clip(CircleShape)
-                    .background(glowColor.copy(alpha = 0.16f))
-            ) {
-                Text(
-                    text = "\uD83E\uDD16\uD83C\uDF3F",
-                    fontSize = 26.sp
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "\uD83E\uDD16 Shamba Scan Console",
+                    text = "Shamba Scan Console",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFE6B325)
@@ -1530,12 +1503,6 @@ private fun ShambaScanEntryCard(
                     color = Color.DarkGray
                 )
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = "Open Shamba Scan",
-                tint = Color(0xFFE6B325),
-                modifier = Modifier.size(28.dp)
-            )
         }
     }
 }
