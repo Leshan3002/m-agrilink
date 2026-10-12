@@ -502,7 +502,11 @@ fun AiChatOverlay(
                     maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF2E7D32),
-                        unfocusedBorderColor = Color.LightGray
+                        unfocusedBorderColor = Color.LightGray,
+                        focusedTextColor = Color(0xFF212121),
+                        unfocusedTextColor = Color(0xFF212121),
+                        focusedPlaceholderColor = Color(0xFF6B7280),
+                        unfocusedPlaceholderColor = Color(0xFF6B7280)
                     )
                 )
                 IconButton(onClick = { startVoiceInput() }) {
