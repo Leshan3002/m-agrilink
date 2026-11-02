@@ -55,6 +55,7 @@ import com.example.m_agrilink.ui.AiScannerScreen
 import com.example.m_agrilink.ui.AskShambaChatScreen
 import com.example.m_agrilink.ui.AuthOnboardingScreen
 import com.example.m_agrilink.ui.DashboardScreen
+import com.example.m_agrilink.ui.SaccoPlannerScreen
 import com.example.m_agrilink.ui.theme.MAgriLinkTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -81,6 +82,7 @@ object MagriLinkRoutes {
     const val AI_SCANNER = "ai_scanner"
     const val ASK_SHAMBA_CHAT = "ask_shamba_chat"
     const val ABOUT_US = "about_us"
+    const val SACCO_PLANNER = "sacco_planner"
 }
 
 /**
@@ -399,7 +401,16 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onOpenAboutUs = {
                                     navController.navigate(MagriLinkRoutes.ABOUT_US)
+                                },
+                                onOpenPlanner = {
+                                    navController.navigate(MagriLinkRoutes.SACCO_PLANNER)
                                 }
+                            )
+                        }
+                        composable(MagriLinkRoutes.SACCO_PLANNER) {
+                            SaccoPlannerScreen(
+                                modifier = Modifier.fillMaxSize(),
+                                onBack = { navController.popBackStack() }
                             )
                         }
                         composable(MagriLinkRoutes.AI_SCANNER) {

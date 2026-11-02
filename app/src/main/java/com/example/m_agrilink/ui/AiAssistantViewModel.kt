@@ -33,11 +33,6 @@ class AiAssistantViewModel : ViewModel() {
             "M-AgriLink advisory framework."
     }
 
-    /** Closing satisfaction check appended to every answer. Generic video/wiki
-     * helper links were removed so replies stay focused on localized data. */
-    private fun satisfactionCheckSuffix(): String =
-        "\n\n✅ Does this fully answer your question? Tell me what is still unclear and I will explain further."
-
     private fun isBuilderQuestion(inquiry: String): Boolean {
         val q = inquiry.lowercase()
         return (q.contains("who built") || q.contains("who created") ||
@@ -50,7 +45,7 @@ class AiAssistantViewModel : ViewModel() {
     init {
         messages.add(
             ChatMessage(
-                "Ask Shamba AI Engine Active. Input inquiries regarding livestock management, soil moisture parameters, or crop protection guidelines to generate localized technical advisories in English or Kiswahili.",
+                "Hello, I'm Shamba, your M-AgriLink farm assistant. Ask me about crop health, livestock, weather, or market guidance. How can I help today?",
                 isUser = false
             )
         )
@@ -93,23 +88,28 @@ class AiAssistantViewModel : ViewModel() {
         if (isBuilderQuestion(inquiry)) {
             consecutiveFailures = 0
             engineStatus = EngineStatus.ONLINE
-            messages.add(ChatMessage("👨‍🌾 $ASSISTANT_IDENTITY 🌱 $ADVISORY_FRAMEWORK_CREDIT", isUser = false))
-            return
-        }
-
-        if (!SecureKeyVault.isConfigured()) {
             messages.add(
                 ChatMessage(
-                    "⚠️ My AI brain isn't connected yet — the app owner needs to add a " +
-                        "free Gemini key (Google AI Studio) into local.properties as " +
-                        "GEMINI_API_KEY. Then I can answer anything! 🌱",
+                    "$ASSISTANT_IDENTITY I provide localized guidance through the $ADVISORY_FRAMEWORK_CREDIT",
                     isUser = false
                 )
             )
             return
         }
 
-        val loadingPlaceholder = ChatMessage("🔍 Analyzing your question…", isUser = false)
+        if (!SecureKeyVault.isConfigured()) {
+            messages.add(
+                ChatMessage(
+                    "The live AI service is not configured yet. Add a Gemini API key to " +
+                        "local.properties as GEMINI_API_KEY, then rebuild the app. " +
+                        "Offline farm guidance is still available.",
+                    isUser = false
+                )
+            )
+            return
+        }
+
+        val loadingPlaceholder = ChatMessage("Preparing your answer…", isUser = false)
         messages.add(loadingPlaceholder)
 
         // Token-streaming consumer: the repository reads SSE deltas on
@@ -148,11 +148,9 @@ class AiAssistantViewModel : ViewModel() {
             when {
                 terminal is ChatStreamEvent.AuthRejected -> messages.add(
                     ChatMessage(
-                        "🔑 Google rejected my API key (invalid or expired). The app owner " +
-                            "needs to paste a fresh free key from Google AI Studio into " +
-                            "local.properties as GEMINI_API_KEY and rebuild — real keys start " +
-                            "with \"AIza\" and are 39 characters. Your farm questions are safe " +
-                            "with me meanwhile! 🌱",
+                        "The AI service rejected the configured API key. Update " +
+                            "GEMINI_API_KEY in local.properties and rebuild the app. " +
+                            "Your conversation remains available.",
                         isUser = false
                     )
                 )
@@ -160,10 +158,9 @@ class AiAssistantViewModel : ViewModel() {
                     consecutiveFailures = 0
                     engineStatus = EngineStatus.ONLINE
                     if (streamIndex >= 0) {
-                        messages[streamIndex] =
-                            messages[streamIndex].copy(text = streamed + satisfactionCheckSuffix())
+                        messages[streamIndex] = messages[streamIndex].copy(text = streamed)
                     } else {
-                        messages.add(ChatMessage(streamed + satisfactionCheckSuffix(), isUser = false))
+                        messages.add(ChatMessage(streamed, isUser = false))
                     }
                 }
                 else -> {
@@ -175,7 +172,7 @@ class AiAssistantViewModel : ViewModel() {
                     } else {
                         registerFailureSilent()
                     }
-                    messages.add(ChatMessage(offlineExpertBrief(telemetry) + satisfactionCheckSuffix(), isUser = false))
+                    messages.add(ChatMessage(offlineExpertBrief(telemetry), isUser = false))
                 }
             }
         }
@@ -209,7 +206,7 @@ class AiAssistantViewModel : ViewModel() {
     private fun offlineExpertBrief(telemetry: TelemetryContext): String {
         val lastUser = messages.lastOrNull { it.isUser }?.text.orEmpty()
         if (isBuilderQuestion(lastUser)) {
-            return "👨‍🌾 $ASSISTANT_IDENTITY 🌱 $ADVISORY_FRAMEWORK_CREDIT"
+            return "$ASSISTANT_IDENTITY I provide localized guidance through the $ADVISORY_FRAMEWORK_CREDIT"
         }
         val crop = telemetry.cropVariety.ifBlank { "Maize" }.trim()
         val county = telemetry.location.ifBlank { "Baringo" }.trim()
@@ -220,25 +217,22 @@ class AiAssistantViewModel : ViewModel() {
         }
         if (record != null) {
             val grounded = MarketDataRepository.getPestAdvisory(record.cropName).cardLines().joinToString(" ")
-            return "Shamba Assistant (Offline Mode): I've detected you are managing " +
-                "${record.cropName} in $county with limited connectivity. " +
-                "🌱 What it is: likely early pest/disease pressure — scout both sides of leaves, stems and buds twice weekly. " +
-                "🚜 Immediate Action: ${record.advisory.plantingSpacing} " +
-                "${record.advisory.landPrep} " +
-                "🌾 Safe Harvesting: ${record.advisory.moistureCeiling} " +
-                "💰 Local market: KES ${record.localPriceKes} → hub KES ${record.hubPriceKes} " +
-                "(net +KES ${record.netMarginKes} per bag). " +
-                grounded + " " +
-                "⚠️ Danger signs: spreading spots/holes, wilting, or pests on most plants — call your agrovet immediately. " +
-                "Next season: rotate crops, clear debris, and mulch to prevent repeat attacks."
+            return "Offline advisory for ${record.cropName} in $county\n\n" +
+                "• Pest and disease watch: scout both sides of leaves, stems, and buds twice weekly.\n" +
+                "• Immediate action: ${record.advisory.plantingSpacing} ${record.advisory.landPrep}\n" +
+                "• Harvest and storage: ${record.advisory.moistureCeiling}\n" +
+                "• Market outlook: KES ${record.localPriceKes} local, KES ${record.hubPriceKes} hub, " +
+                "net +KES ${record.netMarginKes} per bag.\n" +
+                "• Field note: $grounded\n\n" +
+                "If most plants are affected, contact your agrovet immediately. " +
+                "Reconnect for a full live brief."
         }
-        return "Shamba Assistant (Offline Mode): I've detected you are managing a " +
-            "$crop orchard in $county with limited connectivity. Based on localized KALRO " +
-            "data, your main priority right now is scouting twice weekly for pest vectors, " +
-            "hanging monitoring traps at canopy level, and clearing fallen fruits and debris " +
-            "to break pest lifecycles. Hold harvested produce under the 13.5% moisture ceiling " +
-            "before storage. " +
-            "⚠️ If most plants are affected or animals are sick, call a vet/agrovet immediately. " +
-            "Reconnect for a full live brief. 🌱"
+        return "Offline advisory for $crop in $county\n\n" +
+            "• Scout twice weekly for pest vectors.\n" +
+            "• Hang monitoring traps at canopy level.\n" +
+            "• Clear fallen fruit and debris to break pest lifecycles.\n" +
+            "• Keep harvested produce below the 13.5% moisture ceiling before storage.\n\n" +
+            "If most plants are affected or animals are sick, contact a vet or agrovet immediately. " +
+            "Reconnect for a full live brief."
     }
 }

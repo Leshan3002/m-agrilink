@@ -1,10 +1,5 @@
 package com.example.m_agrilink.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
@@ -17,17 +12,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +55,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.example.m_agrilink.data.AppLocale
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /**
@@ -68,7 +67,8 @@ import java.util.Locale
 data class ChatMessage(
     val text: String,
     val isUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val id: String = java.util.UUID.randomUUID().toString()
 )
 
 data class TelemetryContext(
@@ -179,7 +179,7 @@ private fun ChatAudioHub(
             },
             enabled = textToSpeech != null && readable.isNotBlank() && !isPlaying
         ) {
-            Text("▶️ Play Audio", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+            Text("Listen", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
         }
         TextButton(
             onClick = {
@@ -192,7 +192,7 @@ private fun ChatAudioHub(
             },
             enabled = isPlaying
         ) {
-            Text("⏸️ Pause", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF424242))
+            Text("Pause", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF424242))
         }
         TextButton(
             onClick = {
@@ -206,7 +206,7 @@ private fun ChatAudioHub(
             },
             enabled = isPlaying || isPaused
         ) {
-            Text("⏹️ Stop", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF424242))
+            Text("Stop", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF424242))
         }
     }
 }
@@ -214,7 +214,10 @@ private fun ChatAudioHub(
 fun AiChatOverlay(
     telemetry: TelemetryContext,
     viewModel: AiAssistantViewModel = viewModel(),
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    fullScreen: Boolean = false,
+    showHeader: Boolean = true
 ) {
     var inputText by remember { mutableStateOf("") }
     val messages = viewModel.messages
@@ -229,13 +232,22 @@ fun AiChatOverlay(
     }
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight(0.8f)
+        modifier = modifier
+            .then(
+                if (fullScreen) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier.fillMaxWidth().fillMaxHeight(0.8f)
+                }
+            )
             .imePadding(),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        tonalElevation = 8.dp,
-        color = Color.White
+        shape = if (fullScreen) {
+            RoundedCornerShape(0.dp)
+        } else {
+            RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        },
+        tonalElevation = 4.dp,
+        color = Color(0xFFF8FAF7)
     ) {
         // Chat voice-over engine (released with the overlay).
         val chatContext = LocalContext.current
@@ -335,39 +347,44 @@ fun AiChatOverlay(
 
         Column(modifier = Modifier.padding(16.dp)) {
             // Header: identity band — avatar mark, title + role caption, Close.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(Color(0xFF1B5E20), CircleShape)
+            if (showHeader) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "S",
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp
-                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFF064E3B), CircleShape)
+                    ) {
+                        Text(
+                            text = "S",
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 17.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "M-AgriLink Assistant",
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1B4332),
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            "Shamba • Farm advisory",
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF6B7280),
+                            fontSize = 11.sp
+                        )
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text("Close", color = Color(0xFF1B4332), fontWeight = FontWeight.SemiBold)
+                    }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "M-AgriLink AI Assistant",
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2E7D32),
-                        fontSize = 18.sp
-                    )
-                    Text(
-                        "FARM ASSISTANT",
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        fontSize = 11.sp
-                    )
-                }
-                TextButton(onClick = onDismiss) { Text("Close") }
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
             // Engine status micro-badge: Live Sync vs Offline Shield Active.
@@ -376,10 +393,10 @@ fun AiChatOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val (dot, label) = when (viewModel.engineStatus) {
-                    EngineStatus.ONLINE -> Color(0xFF2E7D32) to "Live Sync"
-                    EngineStatus.STREAMING -> Color(0xFF2E7D32) to "Engine Active — Streaming Response…"
-                    EngineStatus.QUOTA -> Color(0xFFE6B325) to "Quota Paused — Restoring Soon"
-                    EngineStatus.OFFLINE -> Color(0xFFE6B325) to "Offline Shield Active"
+                    EngineStatus.ONLINE -> Color(0xFF2E7D32) to "Online"
+                    EngineStatus.STREAMING -> Color(0xFF2E7D32) to "Shamba is responding…"
+                    EngineStatus.QUOTA -> Color(0xFFE6B325) to "Quota paused"
+                    EngineStatus.OFFLINE -> Color(0xFFE6B325) to "Offline mode"
                     else -> Color.Gray to "Connecting…"
                 }
                 Box(
@@ -398,7 +415,7 @@ fun AiChatOverlay(
                 if (viewModel.engineStatus == EngineStatus.OFFLINE) {
                     TextButton(onClick = { viewModel.retryConnection() }) {
                         Text(
-                            "↻ Retry",
+                            "Retry",
                             fontSize = 12.sp,
                             color = Color(0xFFA75D5D),
                             fontWeight = FontWeight.Bold
@@ -411,9 +428,9 @@ fun AiChatOverlay(
             // every new question or streamed token chunk pins the viewport to
             // the latest bubble so the conversation stays in view hands-free.
             val listState = rememberLazyListState()
-            LaunchedEffect(messages.size) {
+            LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {
                 if (messages.isNotEmpty()) {
-                    listState.animateScrollToItem(messages.size - 1)
+                    listState.animateScrollToItem(messages.lastIndex)
                 }
             }
             LazyColumn(
@@ -422,54 +439,42 @@ fun AiChatOverlay(
                     .weight(1f)
                     .fillMaxWidth(),
                 contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(
-                    messages,
-                    // Stable per-message key (timestamp + side): the streaming
-                    // bubble updates its text in place instead of remounting
-                    // on every token chunk, keeping scroll position smooth.
-                    key = { it.timestamp.toString() + it.isUser }
+                    items = messages,
+                    key = { it.id }
                 ) { message ->
-                    var bubbleVisible by remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) { bubbleVisible = true }
-                    AnimatedVisibility(
-                        visible = bubbleVisible,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
-                        ChatBubble(
-                            message = message,
-                            textToSpeech = chatTts,
-                            onSpeak = { text ->
-                                if (AppAudioGate.muted) {
-                                    AppAudioGate.muted = false
-                                    val tts = chatTts
-                                    if (tts != null) {
-                                        try {
-                                            applyChatTtsLocale(tts)
-                                        } catch (e: Exception) {
-                                        }
-                                        val spoken = chatSpeakableText(text)
-                                        spoken.chunked(400).forEach { chunk ->
-                                            tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
-                                        }
-                                    }
-                                } else {
+                    ChatBubble(
+                        message = message,
+                        textToSpeech = chatTts,
+                        onSpeak = { text ->
+                            if (AppAudioGate.muted) {
+                                AppAudioGate.muted = false
+                                val tts = chatTts
+                                if (tts != null) {
                                     try {
-                                        chatTts?.stop()
+                                        applyChatTtsLocale(tts)
                                     } catch (e: Exception) {
                                     }
-                                    AppAudioGate.muted = true
+                                    val spoken = chatSpeakableText(text)
+                                    spoken.chunked(400).forEach { chunk ->
+                                        tts.speak(chunk, TextToSpeech.QUEUE_ADD, null, null)
+                                    }
                                 }
+                            } else {
+                                try {
+                                    chatTts?.stop()
+                                } catch (e: Exception) {
+                                }
+                                AppAudioGate.muted = true
                             }
-                        )
-                    }
+                        }
+                    )
                 }
             }
 
-            // Quick questions (tap instead of typing): dark organic green chips
-            // with high-contrast white/gold labels so they stay readable in sun.
+            // Suggested questions help farmers start without typing.
             if (messages.none { it.isUser }) {
                 Row(
                     modifier = Modifier
@@ -478,21 +483,23 @@ fun AiChatOverlay(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
-                        "🥭 Mango Management" to "Mango management",
-                        "🥛 Milk Production Yields" to "Milk production yields",
-                        "🌱 Bean Protection" to "Bean protection",
-                        "🐄 Livestock Health" to "Livestock health"
-                    ).forEach { (label, query) ->
-                        Button(
-                            onClick = { viewModel.sendMessage(query, telemetry) },
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF1B4332),
-                                contentColor = Color.White
-                            ),
+                        "Mango management",
+                        "Milk production",
+                        "Bean protection",
+                        "Livestock health"
+                    ).forEach { query ->
+                        OutlinedButton(
+                            onClick = { submitInquiry(query) },
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.dp, Color(0xFFB7C9B7)),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                         ) {
-                            Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text(
+                                query,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF1B4332)
+                            )
                         }
                     }
                 }
@@ -518,10 +525,10 @@ fun AiChatOverlay(
                     border = BorderStroke(1.dp, Color(0xFFE6B325))
                 ) {
                     Text(
-                        text = "⚠️ API Quota Limit Reached: M-AgriLink has temporarily reached its free-tier token cap. Your question stays visible in this conversation. Live sync will restore automatically shortly.",
+                        text = "Live AI answers are temporarily paused because the free-tier quota was reached. You can keep chatting; offline guidance remains available.",
                         fontSize = 12.sp,
                         lineHeight = 17.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         color = Color(0xFF1B4332),
                         modifier = Modifier.padding(12.dp)
                     )
@@ -532,37 +539,45 @@ fun AiChatOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Bottom
             ) {
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = { inputText = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Ask about your farm... or tap 🎤 to speak") },
-                    shape = RoundedCornerShape(24.dp),
+                    placeholder = { Text("Ask about crops, livestock, weather…") },
+                    shape = RoundedCornerShape(22.dp),
                     maxLines = 3,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { submitInquiry(inputText) }),
+                    trailingIcon = {
+                        IconButton(onClick = { startVoiceInput() }) {
+                            Icon(
+                                imageVector = Icons.Filled.Mic,
+                                contentDescription = "Voice input",
+                                tint = Color(0xFF2E7D32)
+                            )
+                        }
+                    },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF2E7D32),
-                        unfocusedBorderColor = Color.LightGray,
+                        unfocusedBorderColor = Color(0xFFD1D5DB),
                         focusedTextColor = Color(0xFF212121),
                         unfocusedTextColor = Color(0xFF212121),
                         focusedPlaceholderColor = Color(0xFF6B7280),
-                        unfocusedPlaceholderColor = Color(0xFF6B7280)
+                        unfocusedPlaceholderColor = Color(0xFF6B7280),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White
                     )
                 )
-                IconButton(onClick = { startVoiceInput() }) {
-                    Icon(
-                        imageVector = Icons.Filled.Mic,
-                        contentDescription = "Voice input",
-                        tint = Color(0xFF2E7D32)
-                    )
-                }
+                Spacer(modifier = Modifier.width(8.dp))
                 Button(
                     onClick = { submitInquiry(inputText) },
+                    enabled = inputText.isNotBlank(),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE6B325),
-                        contentColor = Color(0xFF1B4332)
+                        containerColor = Color(0xFF1B4332),
+                        contentColor = Color.White
                     ),
                     contentPadding = PaddingValues(0.dp),
                     modifier = Modifier.size(48.dp)
@@ -673,7 +688,7 @@ private fun LinkPreviewCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = domain + if (site == "youtube") " • ▶ video" else if (site == "wikipedia") " • 🌐 article" else "",
+                    text = domain + if (site == "youtube") " • Video" else if (site == "wikipedia") " • Article" else "",
                     fontSize = 11.sp,
                     color = Color.Gray
                 )
@@ -695,127 +710,144 @@ fun ChatBubble(
     textToSpeech: TextToSpeech? = null,
     onSpeak: ((String) -> Unit)? = null
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        contentAlignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
+    val isUser = message.isUser
+    val bubbleColor = if (isUser) Color(0xFF064E3B) else Color.White
+    val bubbleBorder = if (isUser) Color(0xFF064E3B) else Color(0xFFE2E8E2)
+    val bubbleText = if (isUser) Color.White else Color(0xFF1F2933)
+    val linkTint = if (isUser) Color(0xFFBBDEFB) else Color(0xFF1B5E20)
+    val links = remember(message.text) { extractChatLinks(message.text) }
+    val timeLabel = remember(message.timestamp) {
+        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp))
+    }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Top
     ) {
-        // Floating-widget bubble language: dark user pill on the right,
-        // white assistant card with an avatar mark on the left.
-        val bubbleColor = if (message.isUser) Color(0xFF1C1C1E) else Color.White
-        val bubbleBorder = if (message.isUser) Color(0xFF1C1C1E) else Color(0xFFE0E0E0)
-        val bubbleText = if (message.isUser) Color.White else Color(0xFF212121)
-        val linkTint = if (message.isUser) Color(0xFFBBDEFB) else Color(0xFF1B5E20)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
-            verticalAlignment = Alignment.Top
+        if (!isUser) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .size(32.dp)
+                    .background(Color(0xFF064E3B), CircleShape)
+            ) {
+                Text(
+                    text = "S",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.sp
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        Column(
+            modifier = Modifier
+                .then(if (isUser) Modifier.fillMaxWidth(0.84f) else Modifier.weight(1f))
+                .shadow(2.dp, RoundedCornerShape(16.dp))
+                .background(bubbleColor, RoundedCornerShape(16.dp))
+                .border(1.dp, bubbleBorder, RoundedCornerShape(16.dp))
+                .padding(12.dp)
         ) {
-            if (!message.isUser) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .background(Color(0xFF1B5E20), CircleShape)
-                ) {
+            if (isUser || links.isEmpty()) {
+                SelectionContainer {
                     Text(
-                        text = "S",
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 13.sp
+                        text = message.text,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        color = bubbleText
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                val linkOpener = LocalContext.current
+                val linkedText = remember(message.text) {
+                    buildAnnotatedString {
+                        var cursor = 0
+                        ChatLinkPattern.findAll(message.text).forEach { match ->
+                            val cleaned = match.value.trimEnd('.', ',', ')', ']', '"', '\'', ';', ':')
+                            val offsetInMatch = match.value.indexOf(cleaned)
+                            val start = match.range.first + offsetInMatch
+                            if (start > cursor) append(message.text.substring(cursor, start))
+                            pushStringAnnotation(tag = "URL", annotation = cleaned)
+                            pushStyle(
+                                SpanStyle(
+                                    color = linkTint,
+                                    textDecoration = TextDecoration.Underline,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                            append(cleaned)
+                            pop()
+                            pop()
+                            val trailing = match.value.substring(offsetInMatch + cleaned.length)
+                            if (trailing.isNotEmpty()) append(trailing)
+                            cursor = match.range.last + 1
+                        }
+                        if (cursor < message.text.length) append(message.text.substring(cursor))
+                    }
+                }
+                ClickableText(
+                    text = linkedText,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                        color = bubbleText
+                    ),
+                    onClick = { offset ->
+                        linkedText.getStringAnnotations("URL", offset, offset)
+                            .firstOrNull()?.let { openChatLink(linkOpener, it.item) }
+                    }
+                )
             }
-            Box(
-                modifier = Modifier
-                    .then(if (message.isUser) Modifier else Modifier.weight(1f))
-                    .shadow(4.dp, RoundedCornerShape(16.dp))
-                    .background(bubbleColor, RoundedCornerShape(16.dp))
-                    .border(1.dp, bubbleBorder, RoundedCornerShape(16.dp))
-                    .padding(12.dp)
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val links = remember(message.text) { extractChatLinks(message.text) }
-                    if (message.isUser || links.isEmpty()) {
-                        SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            Text(
-                                text = message.text,
-                                fontSize = 14.sp,
-                                color = bubbleText
-                            )
-                        }
-                    } else {
-                        val linkOpener = LocalContext.current
-                        val linkedText = remember(message.text) {
-                            buildAnnotatedString {
-                                var cursor = 0
-                                ChatLinkPattern.findAll(message.text).forEach { match ->
-                                    val cleaned = match.value.trimEnd('.', ',', ')', ']', '"', '\'', ';', ':')
-                                    val offsetInMatch = match.value.indexOf(cleaned)
-                                    val start = match.range.first + offsetInMatch
-                                    val end = start + cleaned.length
-                                    if (start > cursor) append(message.text.substring(cursor, start))
-                                    pushStringAnnotation(tag = "URL", annotation = cleaned)
-                                    pushStyle(
-                                        SpanStyle(
-                                            color = linkTint,
-                                            textDecoration = TextDecoration.Underline,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    )
-                                    append(cleaned)
-                                    pop()
-                                    pop()
-                                    val trailing = match.value.substring(offsetInMatch + cleaned.length)
-                                    if (trailing.isNotEmpty()) append(trailing)
-                                    cursor = match.range.last + 1
-                                }
-                                if (cursor < message.text.length) append(message.text.substring(cursor))
-                            }
-                        }
-                        ClickableText(
-                            text = linkedText,
-                            style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = bubbleText),
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                            onClick = { offset ->
-                                linkedText.getStringAnnotations("URL", offset, offset)
-                                    .firstOrNull()?.let { openChatLink(linkOpener, it.item) }
-                            }
+                if (onSpeak != null && !isUser) {
+                    IconButton(
+                        onClick = { onSpeak(message.text) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (AppAudioGate.muted) {
+                                Icons.AutoMirrored.Filled.VolumeOff
+                            } else {
+                                Icons.AutoMirrored.Filled.VolumeUp
+                            },
+                            contentDescription = if (AppAudioGate.muted) "Unmute all audio" else "Mute all audio",
+                            tint = Color(0xFF1B5E20),
+                            modifier = Modifier.size(18.dp)
                         )
-                    }
-                    if (onSpeak != null && !message.isUser) {
-                        IconButton(onClick = { onSpeak(message.text) }) {
-                            Icon(
-                                imageVector = if (AppAudioGate.muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
-                                contentDescription = if (AppAudioGate.muted) "Unmute all audio" else "Mute all audio",
-                                tint = Color(0xFF1B5E20),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
                     }
                 }
-                if (!message.isUser) {
-                    val links = remember(message.text) { extractChatLinks(message.text) }
-                    if (textToSpeech != null && message.text.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        ChatAudioHub(
-                            textToSpeech = textToSpeech,
-                            textToRead = message.text
-                        )
-                    }
-                    if (links.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        links.forEach { url ->
-                            LinkPreviewCard(url = url)
-                            Spacer(modifier = Modifier.height(6.dp))
-                        }
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = timeLabel,
+                    fontSize = 10.sp,
+                    color = if (isUser) Color(0xFFB9D6C4) else Color(0xFF8A8A8A)
+                )
+            }
+
+            if (!isUser) {
+                if (textToSpeech != null && message.text.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    ChatAudioHub(
+                        textToSpeech = textToSpeech,
+                        textToRead = message.text
+                    )
+                }
+                if (links.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    links.forEach { url ->
+                        LinkPreviewCard(url = url)
+                        Spacer(modifier = Modifier.height(6.dp))
                     }
                 }
             }
-        }
         }
     }
 }

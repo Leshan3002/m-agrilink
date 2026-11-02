@@ -33,6 +33,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -851,6 +853,532 @@ private fun FaqSectionComponent(
     }
 }
 
+private data class BentoWeatherPoint(
+    val label: String,
+    val temperatureC: Float,
+    val rainPct: Int
+)
+
+@Composable
+private fun LiveWeatherHourlyChart(
+    modifier: Modifier = Modifier,
+    points: List<BentoWeatherPoint>
+) {
+    Canvas(modifier = modifier) {
+        val temperatureMin = 10f
+        val temperatureMax = 30f
+        val horizontalStep = if (points.size > 1) size.width / (points.size - 1) else size.width
+        val verticalStep = size.height / 3f
+
+        repeat(3) {
+            val y = verticalStep * it
+            drawLine(
+                color = Color(0xFFE0E0E0),
+                start = Offset(0f, y),
+                end = Offset(size.width, y),
+                strokeWidth = 1f
+            )
+        }
+
+        points.forEachIndexed { index, point ->
+            val x = if (points.size > 1) index * horizontalStep else size.width / 2f
+            val rainBarHeight = (point.rainPct.coerceIn(0, 100) / 100f) * size.height * 0.30f
+            drawLine(
+                color = Color(0xFF90CAF9),
+                start = Offset(x, size.height),
+                end = Offset(x, size.height - rainBarHeight),
+                strokeWidth = 6f
+            )
+        }
+
+        points.forEachIndexed { index, point ->
+            val x = if (points.size > 1) index * horizontalStep else size.width / 2f
+            val y = size.height - ((point.temperatureC - temperatureMin) / (temperatureMax - temperatureMin) * size.height)
+            if (index > 0) {
+                val previous = points[index - 1]
+                val previousX = (index - 1) * horizontalStep
+                val previousY = size.height - ((previous.temperatureC - temperatureMin) / (temperatureMax - temperatureMin) * size.height)
+                drawLine(
+                    color = Color(0xFF2E7D32),
+                    start = Offset(previousX, previousY),
+                    end = Offset(x, y),
+                    strokeWidth = 3f
+                )
+            }
+            drawCircle(
+                color = Color(0xFFE6B325),
+                radius = 4f,
+                center = Offset(x, y)
+            )
+        }
+    }
+}
+
+@Composable
+private fun LiveWeatherBentoTile(
+    locationLabel: String,
+    regionLabel: String,
+    temperatureC: Double,
+    humidity: Int,
+    windKmh: Double,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(6.dp, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = locationLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF064E3B)
+                    )
+                    Text(
+                        text = regionLabel,
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                }
+                Text(
+                    text = "${"%.1f".format(temperatureC)}°C",
+                    fontSize = 38.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF8D493A)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Humidity ${humidity}% • Wind ${"%.1f".format(windKmh)} km/h",
+                fontSize = 12.sp,
+                color = Color.DarkGray
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            LiveWeatherHourlyChart(
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                points = listOf(
+                    BentoWeatherPoint("Now", temperatureC.toFloat(), humidity),
+                    BentoWeatherPoint("13:00", 15f, 62),
+                    BentoWeatherPoint("14:00", 16f, 58),
+                    BentoWeatherPoint("15:00", 17f, 49)
+                )
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Hourly rain and temperature trend.",
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                color = Color.Gray
+            )
+        }
+    }
+}
+
+@Composable
+private fun NationalMarketBentoTile(
+    best: com.example.m_agrilink.data.CropMarketRecord?,
+    movers: List<com.example.m_agrilink.data.CropMarketRecord>,
+    modifier: Modifier = Modifier
+) {
+    val animatedMargin by animateFloatAsState(
+        targetValue = if (best != null && best.localPriceKes > 0) {
+            ((best.netMarginKes * 100) / best.localPriceKes).toFloat()
+        } else {
+            0f
+        }
+    )
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(6.dp, RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E))
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(18.dp)) {
+            Text(
+                text = str("banner_title"),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFE6B325)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            if (best == null) {
+                Text(
+                    text = "Select a county to load live market trends.",
+                    color = Color.LightGray,
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp
+                )
+            } else {
+                Text(
+                    text = best.cropName,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Local KES ${best.localPriceKes} → Hub KES ${best.hubPriceKes}",
+                    color = Color.LightGray,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = strf("arb_net", best.netMarginKes),
+                    color = Color(0xFF81C784),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Ticker ${if (animatedMargin >= 0) "+" else ""}${"%.1f".format(animatedMargin.toDouble())}%",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFE6B325)
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = "Top corridor movers",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFE6B325)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                movers.forEach { mover ->
+                    val moverPct = if (mover.localPriceKes > 0) {
+                        (mover.netMarginKes * 100) / mover.localPriceKes
+                    } else {
+                        0
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = mover.cropName,
+                            color = Color.White,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "${if (moverPct >= 0) "+" else ""}$moverPct%",
+                            color = if (moverPct >= 0) Color(0xFF81C784) else Color(0xFFEF9A9A),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShambaScanBentoTile(
+    onOpenScanner: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onOpenScanner,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .shadow(6.dp, RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF064E3B))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF1B4332)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "✦",
+                    color = Color(0xFFE6B325),
+                    fontSize = 20.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Shamba Scan",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1
+            )
+            Text(
+                text = "Crop diagnostics",
+                fontSize = 11.sp,
+                color = Color(0xFFD1E7DD),
+                maxLines = 2
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = onOpenScanner,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
+            ) {
+                Text(
+                    text = "Scan",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SaccoPlannerBentoTile(
+    onOpenPlanner: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onOpenPlanner,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .shadow(6.dp, RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF2E7D32)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🌱",
+                    fontSize = 20.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "SACCO Input Planner",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2C2C2E),
+                maxLines = 2
+            )
+            Text(
+                text = "Budget certified inputs.",
+                fontSize = 11.sp,
+                color = Color.DarkGray,
+                maxLines = 2
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Button(
+                onClick = onOpenPlanner,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+            ) {
+                Text(
+                    text = "Plan",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ShambaChatBentoTile(
+    onOpenChat: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onOpenChat,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(140.dp)
+            .shadow(6.dp, RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF064E3B))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1B4332)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🧠",
+                        fontSize = 20.sp
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = str("shamba_title"),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "Quick advice for crops and livestock.",
+                        fontSize = 11.sp,
+                        color = Color(0xFFD1E7DD),
+                        maxLines = 2
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = onOpenChat,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE6B325))
+                ) {
+                    Text(
+                        text = "Ask",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "• Crop health",
+                    fontSize = 10.sp,
+                    color = Color(0xFFD1E7DD)
+                )
+                Text(
+                    text = "• Market prices",
+                    fontSize = 10.sp,
+                    color = Color(0xFFD1E7DD)
+                )
+                Text(
+                    text = "• Weather alerts",
+                    fontSize = 10.sp,
+                    color = Color(0xFFD1E7DD)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardBentoGrid(
+    selectedCounty: String,
+    bestMarket: com.example.m_agrilink.data.CropMarketRecord?,
+    topMovers: List<com.example.m_agrilink.data.CropMarketRecord>,
+    activeTemperature: Double,
+    activeHumidity: Int,
+    activeWindSpeed: Double,
+    onOpenScanner: () -> Unit,
+    onOpenChat: () -> Unit,
+    onOpenPlanner: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        LiveWeatherBentoTile(
+            locationLabel = "Marigat, Kenya",
+            regionLabel = if (selectedCounty.isBlank()) {
+                "Baringo County • Kenya"
+            } else {
+                "$selectedCounty County • Kenya"
+            },
+            temperatureC = activeTemperature,
+            humidity = activeHumidity,
+            windKmh = activeWindSpeed,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().height(376.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            NationalMarketBentoTile(
+                best = bestMarket,
+                movers = topMovers,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                ShambaScanBentoTile(
+                    onOpenScanner = onOpenScanner,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                SaccoPlannerBentoTile(
+                    onOpenPlanner = onOpenPlanner,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        ShambaChatBentoTile(
+            onOpenChat = onOpenChat,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+fun SaccoPlannerScreen(
+    modifier: Modifier = Modifier,
+    plantedCrop: String = "",
+    onBack: () -> Unit = {}
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        TextButton(onClick = onBack) {
+            Text(
+                text = "← Back to Dashboard",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF064E3B)
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        SaccoInputPlannerWidget(
+            modifier = Modifier.fillMaxWidth(),
+            plantedCrop = plantedCrop
+        )
+    }
+}
+
 /**
  * Dedicated Market Overview page (app core: market trends & analysis).
  * Ranks every crop in the corridor with margins, verdicts, and outlook.
@@ -1666,7 +2194,8 @@ fun DashboardScreen(
     onLogout: () -> Unit = {},
     onOpenScanner: () -> Unit = {},
     onOpenChat: () -> Unit = {},
-    onOpenAboutUs: () -> Unit = {}
+    onOpenAboutUs: () -> Unit = {},
+    onOpenPlanner: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     var expanded by remember { mutableStateOf(false) }
@@ -1677,6 +2206,12 @@ fun DashboardScreen(
     var countySearchQuery by rememberSaveable { mutableStateOf("") }
     val countyData = remember(selectedCounty) {
         MarketDataRepository.getCountyData(selectedCounty)
+    }
+    val bestMarket = remember(countyData) {
+        MarketDataRepository.bestArbitrage(countyData)
+    }
+    val topMovers = remember(countyData) {
+        MarketDataRepository.topMovers(countyData, 3)
     }
     val targetHubName = remember(selectedCounty) {
         MarketDataRepository.targetHubFor(selectedCounty)
@@ -2342,6 +2877,22 @@ fun DashboardScreen(
             }
             if (activeViewport != "weather" && activeViewport != "market" && activeViewport != "articles") {
 
+            // --- 1. ASYMMETRIC BENTO GRID: WEATHER / MARKET / SCANNER / PLANNER / CHAT ---
+            DashboardBentoGrid(
+                selectedCounty = selectedCounty,
+                bestMarket = bestMarket,
+                topMovers = topMovers,
+                activeTemperature = activeTemperature,
+                activeHumidity = activeHumidity,
+                activeWindSpeed = activeWindSpeed,
+                onOpenScanner = onOpenScanner,
+                onOpenChat = onOpenChat,
+                onOpenPlanner = onOpenPlanner,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // --- 2. HIGH-CONTRAST GOLD DROPDOWN HUB ---
             Text(
                 text = str("home_corridor"),
@@ -2780,227 +3331,16 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- 3. THE HIGH-CONTRAST ARBITRAGE CARD MATRIX ---
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(4.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1E)) // Premium Dark Slate background
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = str("arb_title"),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFE6B325)
-                    )
-
-                    Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 12.dp))
-
-                    if (selectedCounty.isEmpty()) {
-                        Text(
-                            text = str("arb_empty"),
-                            color = Color.LightGray,
-                            fontSize = 14.sp,
-                            lineHeight = 22.sp
-                        )
-                    } else {
-                        Text(
-                            text = strf("arb_route", selectedCounty, targetHubName),
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        countyData.forEach { crop ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "${crop.cropName} (${crop.unit})",
-                                        color = Color.LightGray,
-                                        fontSize = 14.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        strf("arb_local", crop.localPriceKes),
-                                        color = Color.White,
-                                        fontSize = 13.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        advisoryField(crop.advisory, "space"),
-                                        color = Color.Gray,
-                                        fontSize = 11.sp,
-                                        lineHeight = 14.sp
-                                    )
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(str("arb_hub"), color = Color.LightGray, fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        "KES ${crop.hubPriceKes}",
-                                        color = Color(0xFFE6B325),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        strf("arb_net", crop.netMarginKes),
-                                        color = Color(0xFF81C784),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFF2C2C2E), RoundedCornerShape(8.dp))
-                                .padding(10.dp)
-                        ) {
-                            Text(
-                                text = countyData.firstOrNull()?.let { advisoryField(it.advisory, "moist") }
-                                    ?: str("arb_moist_fallback"),
-                                color = Color(0xFF81C784), // Positive Green highlight
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // --- 3-ii. SACCO INPUT PLANNER WIDGET (price grid + acreage calculator) ---
-            SaccoInputPlannerWidget(
-                modifier = Modifier.fillMaxWidth(),
-                plantedCrop = if (isCropIntentInvalid) "" else farmerPlantedCrop
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // --- 3-iii. APICULTURE HIVE JOURNAL (KALRO ABIRI module) ---
+            // --- SECONDARY MODULES: HIVE JOURNAL + FAQ ---
             HiveJournalComponent(modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- 3-iv. FREQUENTLY ASKED QUESTIONS (expandable docs) ---
             FaqSectionComponent(textToSpeech = textToSpeech, modifier = Modifier.fillMaxWidth())
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            if (showShambaChat) {
-                Dialog(onDismissRequest = { showShambaChat = false }) {
-                    AiChatOverlay(
-                        // Standalone assistant: neutral defaults so replies do not
-                        // depend on dashboard launch inputs (county / crop).
-                        // The user specifies location/crop inside the chat instead.
-                        telemetry = TelemetryContext(
-                            location = "Kenya",
-                            temp = "—",
-                            rainProb = "N/A",
-                            wind = "—",
-                            humidity = "—",
-                            cropVariety = "General"
-                        ),
-                        onDismiss = { showShambaChat = false }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // --- 3C. CENTRAL BANK SACCO INPUT PLANNER ---
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(4.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = str("sac3_title"),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2C2C2E)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (selectedCounty.isEmpty()) str("sac3_sub_empty")
-                        else strf("sac3_sub_county", selectedCounty),
-                        color = Color.DarkGray,
-                        fontSize = 13.sp
-                    )
-                    Divider(color = Color(0xFFE0E0E0), modifier = Modifier.padding(vertical = 12.dp))
-                    MarketDataRepository.getInputTrends(selectedCounty).forEach { input ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(input.name, color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                Text(input.unit, color = Color.Gray, fontSize = 12.sp)
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    "KES ${input.priceKes}",
-                                    color = Color.Black,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
-                                )
-                                Text(input.trend, color = Color(0xFF2E7D32), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFE8F5E9), RoundedCornerShape(8.dp))
-                            .padding(10.dp)
-                    ) {
-                        Text(
-                            str("sac3_tip"),
-                            color = Color(0xFF2E7D32),
-                            fontSize = 13.sp,
-                            lineHeight = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // --- 4. THE TACTILE ACTION BUTTON WITH LAYOUT PROTECTION ---
-            Button(
-                onClick = { /* Launch Weather Activity Intent */ },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-
-                .shadow(4.dp, RoundedCornerShape(12.dp)),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA75D5D)) // Brand Terracotta accent
-            ) {
-            Text(
-                text = str("cta_launch"),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-// CRITICAL SPACER BUFFER: Prevents layout elements from crashing into the bottom tab bar icons
+            // CRITICAL SPACER BUFFER: Prevents layout elements from crashing into the bottom tab bar icons
             Spacer(modifier = Modifier.height(100.dp))
             Text(
                 text = "© 2026 M-AgriLink. All rights reserved.",
